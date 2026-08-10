@@ -1166,7 +1166,8 @@ export const accountStore = {
     return this.getAll().find((a) => a.id === id) || null;
   },
   findByUsername(username: string) {
-    return this.getAll().find((a) => a.username === username) || null;
+    const target = (username || '').trim().toLowerCase();
+    return this.getAll().find((a) => (a.username || '').trim().toLowerCase() === target) || null;
   },
   add(account: User) {
     const accounts = this.getAll();

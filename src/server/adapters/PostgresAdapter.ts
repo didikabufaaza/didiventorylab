@@ -159,15 +159,20 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   async getTenants(): Promise<TenantInfo[]> {
-    const res = await this.pool.query('SELECT id, name, unit, description, status, created_at FROM lrims_tenants ORDER BY created_at ASC');
-    return res.rows.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      unit: r.unit,
-      description: r.description,
-      status: r.status,
-      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
-    }));
+    try {
+      const res = await this.pool.query('SELECT id, name, unit, description, status, created_at FROM lrims_tenants ORDER BY created_at ASC');
+      return res.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        unit: r.unit,
+        description: r.description,
+        status: r.status,
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+      }));
+    } catch (err) {
+      console.error('[PostgresAdapter] Error in getTenants, returning fallback:', err);
+      return DEFAULT_TENANTS;
+    }
   }
 
   async saveTenants(tenants: TenantInfo[]): Promise<void> {
@@ -196,15 +201,20 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   async getAccounts(): Promise<{ accounts: User[]; pendingUsers: PendingUser[] }> {
-    const res = await this.pool.query("SELECT payload FROM lrims_accounts WHERE key_name = 'global_accounts'");
-    if (res.rows.length === 0) {
+    try {
+      const res = await this.pool.query("SELECT payload FROM lrims_accounts WHERE key_name = 'global_accounts'");
+      if (res.rows.length === 0) {
+        return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
+      }
+      const payload = res.rows[0].payload || {};
+      return {
+        accounts: payload.accounts || DEFAULT_ACCOUNTS,
+        pendingUsers: payload.pendingUsers || [],
+      };
+    } catch (err) {
+      console.error('[PostgresAdapter] Error in getAccounts, returning fallback:', err);
       return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
     }
-    const payload = res.rows[0].payload || {};
-    return {
-      accounts: payload.accounts || DEFAULT_ACCOUNTS,
-      pendingUsers: payload.pendingUsers || [],
-    };
   }
 
   async saveAccounts(state: { accounts: User[]; pendingUsers: PendingUser[] }): Promise<void> {
@@ -217,13 +227,18 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   async getTenantData(tenantId: string): Promise<DBData> {
-    const res = await this.pool.query('SELECT payload FROM lrims_tenant_data WHERE tenant_id = $1', [tenantId]);
-    if (res.rows.length === 0) {
-      const initial = seedTenantData();
-      await this.saveTenantData(tenantId, initial);
-      return initial;
+    try {
+      const res = await this.pool.query('SELECT payload FROM lrims_tenant_data WHERE tenant_id = $1', [tenantId]);
+      if (res.rows.length === 0) {
+        const initial = seedTenantData();
+        await this.saveTenantData(tenantId, initial);
+        return initial;
+      }
+      return res.rows[0].payload as DBData;
+    } catch (err) {
+      console.error(`[PostgresAdapter] Error in getTenantData(${tenantId}), returning fallback:`, err);
+      return seedTenantData();
     }
-    return res.rows[0].payload as DBData;
   }
 
   async saveTenantData(tenantId: string, data: DBData): Promise<void> {
