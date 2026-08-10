@@ -24,6 +24,7 @@ import {
   Boxes,
   ShieldCheck,
   FileText,
+  LogOut,
 } from 'lucide-react';
 import { UserRole } from '../types.js';
 
@@ -54,6 +55,7 @@ interface SidebarProps {
   setIsOpenMobile: (open: boolean) => void;
   isCollapsed?: boolean;
   setIsCollapsed?: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
+  onLogout?: () => void;
 }
 
 interface NavItem {
@@ -109,6 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsOpenMobile,
   isCollapsed = false,
   setIsCollapsed,
+  onLogout,
 }) => {
   const allowedTabs = ROLE_MENU_ACCESS[userRole] || ROLE_MENU_ACCESS['Auditor'];
 
@@ -187,15 +190,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Brand Header */}
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4 shrink-0">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 font-bold text-white shadow-md shadow-indigo-950/50 ring-1 ring-indigo-400/30">
-              <FlaskConical className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 border border-slate-800 shadow-md p-1">
+              <img
+                src="https://lh3.googleusercontent.com/d/1aJ9JZ4J44viC5qgISqdHgNAOx82_9ZFL"
+                alt="di-diventory logo"
+                className="h-full w-full object-contain"
+              />
             </div>
             {!isCollapsed && (
               <div className="truncate transition-opacity duration-200">
                 <h1 className="font-extrabold text-base text-white tracking-tight leading-none">
-                  LabStock <span className="text-indigo-400">Pro</span>
+                  di-diventory
                 </h1>
-                <p className="text-[10px] font-medium text-slate-400 mt-0.5">Inventory & Lot FEFO</p>
+                <p className="text-[10px] font-semibold text-indigo-400 mt-0.5">didik-digital inventory</p>
               </div>
             )}
           </div>
@@ -310,14 +317,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer */}
         <div
-          className={`border-t border-slate-800 p-3 bg-slate-900/60 text-[11px] text-slate-500 text-center shrink-0 ${
+          className={`border-t border-slate-800 p-3 bg-slate-950/80 text-[11px] text-slate-400 text-center shrink-0 space-y-2.5 ${
             isCollapsed ? 'lg:px-1 lg:py-2' : ''
           }`}
         >
-          <p className="font-semibold text-slate-400 truncate">
-            {isCollapsed ? 'v1.0' : 'LabStock Pro v1.0'}
-          </p>
-          {!isCollapsed && <p className="text-[10px] text-slate-500">Hospital Reagent Management</p>}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Keluar dari Aplikasi"
+              className={`w-full flex items-center justify-center space-x-2 rounded-xl bg-rose-600/20 border border-rose-500/40 text-rose-300 hover:bg-rose-600 hover:text-white transition-all py-2 px-2 text-xs font-bold shadow-xs group ${
+                isCollapsed ? 'lg:px-1.5' : ''
+              }`}
+            >
+              <LogOut className="h-4 w-4 shrink-0 group-hover:scale-110 transition-transform text-rose-400 group-hover:text-white" />
+              <span className={`truncate ${isCollapsed ? 'lg:hidden' : 'inline'}`}>Keluar Aplikasi</span>
+            </button>
+          )}
+
+          <div>
+            <p className="font-bold text-slate-200 truncate">
+              {isCollapsed ? 'di-diventory.v1' : 'di-diventory.v1'}
+            </p>
+            {!isCollapsed && <p className="text-[10px] font-semibold text-slate-400">didik-digital inventory</p>}
+          </div>
         </div>
       </aside>
     </>

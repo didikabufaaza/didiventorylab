@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserRole } from '../../types.js';
 import { loginApi, registerApi, resetPasswordApi } from '../../lib/api.js';
-import { Eye, EyeOff, FlaskConical, LogIn, UserPlus, ChevronLeft, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, LogIn, UserPlus, ChevronLeft, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess: (user: { id: string; name: string; username: string; role: UserRole; unit: string; email: string }) => void;
@@ -106,74 +106,67 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setResetSuccessMsg(msg);
       setMode('reset-success');
     } catch (err: any) {
-      setResetError(err.message || 'Gagal mereset password. Pastikan username dan email terdaftar sudah benar.');
+      setResetError(err.message || 'Gagal mereset password.');
     } finally {
       setResetLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#0c1938]">
-      {/* Sleek, Bright Royal Blue Hospital & Lab Inventory Background Image */}
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-black text-white">
+      {/* Background Image with Dark Overlay */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-1000 brightness-110 contrast-105 opacity-95 scale-105"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-1000 brightness-75 contrast-125 opacity-40 scale-105"
         style={{ backgroundImage: `url('/lab_login_bg.jpg')` }}
       >
-        {/* Soft, Elegant Royal Blue Gradient & Subtle Blur Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0c1d43]/70 via-[#132a5e]/60 to-[#1e3a8a]/65 backdrop-blur-[1px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/80 to-black/95 backdrop-blur-[2px]" />
       </div>
 
-      {/* Animated background soft royal blue glow accents */}
+      {/* Glow Effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-blue-500/25 blur-3xl animate-pulse" />
-        <div className="absolute top-1/3 -right-40 w-80 h-80 rounded-full bg-indigo-500/20 blur-3xl animate-pulse delay-1000" />
-        <div className="absolute -bottom-32 left-1/3 w-72 h-72 rounded-full bg-sky-500/15 blur-3xl animate-pulse delay-500" />
-
-        {/* Subtle grid lines */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.05]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="white" strokeWidth="0.8" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-600/20 blur-3xl animate-pulse" />
+        <div className="absolute top-1/3 -right-40 w-80 h-80 rounded-full bg-blue-600/20 blur-3xl animate-pulse delay-1000" />
       </div>
 
       {/* Main card */}
-      <div className="relative z-10 w-full max-w-md mx-4">
-        {/* Logo header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-2xl shadow-blue-500/40 mb-4 ring-4 ring-white/10">
-            <FlaskConical className="h-8 w-8 text-white" />
+      <div className="relative z-10 w-full max-w-md mx-4 py-8">
+        {/* Logo Header */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-indigo-950/80 mb-3 p-2 ring-1 ring-slate-700">
+            <img
+              src="https://lh3.googleusercontent.com/d/1aJ9JZ4J44viC5qgISqdHgNAOx82_9ZFL"
+              alt="di-diventory logo"
+              className="h-full w-full object-contain"
+            />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight drop-shadow-md">SI-REAGEN</h1>
-          <p className="text-sm text-blue-100/90 mt-1 font-medium drop-shadow-xs">Sistem Manajemen Persediaan Reagen Lab</p>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight drop-shadow-md">
+            di-diventory
+          </h1>
+          <p className="text-sm text-indigo-300 font-semibold mt-1">didik-digital inventory</p>
         </div>
 
-        {/* Card */}
-        <div className="rounded-2xl border border-blue-300/25 bg-[#0f234e]/60 backdrop-blur-2xl shadow-2xl shadow-blue-950/80 overflow-hidden">
-          {/* Card Header Indicator */}
-          <div className="h-1 bg-gradient-to-r from-blue-400 via-indigo-400 to-sky-400" />
+        {/* Form Card (Black Theme & High Contrast) */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/90 backdrop-blur-xl shadow-2xl shadow-black ring-1 ring-slate-800 overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-indigo-500 via-blue-500 to-indigo-600" />
 
-          <div className="p-8">
+          <div className="p-7">
             {/* === LOGIN FORM === */}
             {mode === 'login' && (
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Selamat Datang</h2>
-                  <p className="text-sm text-slate-400 mt-0.5">Masuk dengan akun LRIMS Anda</p>
+                  <h2 className="text-xl font-extrabold text-white">Selamat Datang</h2>
+                  <p className="text-xs text-slate-300 mt-1 font-medium">Masuk ke sistem persediaan laboratorium Anda</p>
                 </div>
 
                 {loginError && (
-                  <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 flex items-start space-x-2.5">
+                  <div className="rounded-xl bg-rose-950/60 border border-rose-600/50 px-4 py-3 flex items-start space-x-2.5">
                     <span className="text-rose-400 text-xs mt-0.5">⚠</span>
-                    <p className="text-xs text-rose-300 font-medium">{loginError}</p>
+                    <p className="text-xs text-rose-200 font-semibold">{loginError}</p>
                   </div>
                 )}
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-blue-100 uppercase tracking-wider">Username</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">Username</label>
                   <input
                     type="text"
                     required
@@ -181,17 +174,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
                     placeholder="Masukkan username..."
-                    className="w-full rounded-xl bg-white/10 border border-blue-200/20 text-white placeholder:text-blue-200/50 px-4 py-3 text-sm font-medium focus:outline-none focus:border-blue-400/80 focus:bg-white/15 focus:ring-2 focus:ring-blue-400/30 transition-all"
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-4 py-3 text-sm font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
                   />
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-blue-100 uppercase tracking-wider">Password</label>
+                    <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">Password</label>
                     <button
                       type="button"
                       onClick={() => { setMode('reset-password'); setResetError(''); }}
-                      className="text-xs font-semibold text-blue-300 hover:text-blue-200 transition-colors"
+                      className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
                     >
                       Lupa Password?
                     </button>
@@ -203,12 +196,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="Masukkan password..."
-                      className="w-full rounded-xl bg-white/10 border border-blue-200/20 text-white placeholder:text-blue-200/50 px-4 py-3 pr-12 text-sm font-medium focus:outline-none focus:border-blue-400/80 focus:bg-white/15 focus:ring-2 focus:ring-blue-400/30 transition-all"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-4 py-3 pr-12 text-sm font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
                     />
                     <button
                       type="button"
                       onClick={() => setShowLoginPwd(!showLoginPwd)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-blue-200/70 hover:text-white transition-colors"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
                     >
                       {showLoginPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -218,7 +211,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full flex items-center justify-center space-x-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 py-3.5 text-sm font-bold text-white hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/40 hover:shadow-blue-500/60 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center space-x-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 py-3.5 text-sm font-extrabold text-white hover:from-indigo-500 hover:to-blue-500 shadow-lg shadow-indigo-950/80 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loginLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -229,15 +222,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </button>
 
                 <div className="relative flex items-center py-1">
-                  <div className="flex-1 h-px bg-white/10" />
-                  <span className="px-3 text-xs text-slate-500">atau</span>
-                  <div className="flex-1 h-px bg-white/10" />
+                  <div className="flex-1 h-px bg-slate-800" />
+                  <span className="px-3 text-xs font-semibold text-slate-400">atau</span>
+                  <div className="flex-1 h-px bg-slate-800" />
                 </div>
 
                 <button
                   type="button"
                   onClick={() => { setMode('register'); setRegError(''); }}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-slate-300 hover:bg-white/10 hover:text-white hover:border-white/25 transition-all"
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl border border-slate-700 bg-slate-900/80 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all"
                 >
                   <UserPlus className="h-4 w-4" />
                   <span>Daftar Akun Baru</span>
@@ -252,107 +245,111 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   <button
                     type="button"
                     onClick={() => setMode('login')}
-                    className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-white/10 transition"
+                    className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <div>
                     <h2 className="text-lg font-bold text-white">Daftar Akun Baru</h2>
-                    <p className="text-xs text-slate-400">Perlu disetujui Super Admin sebelum dapat masuk</p>
+                    <p className="text-xs text-slate-300">Perlu disetujui Super Admin sebelum dapat masuk</p>
                   </div>
                 </div>
 
                 {regError && (
-                  <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3">
-                    <p className="text-xs text-rose-300 font-medium">{regError}</p>
+                  <div className="rounded-xl bg-rose-950/60 border border-rose-600/50 px-4 py-3">
+                    <p className="text-xs text-rose-200 font-semibold">{regError}</p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2 space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Nama Lengkap *</label>
+                    <label className="text-xs font-bold text-slate-200">Nama Lengkap *</label>
                     <input
                       type="text" required value={regName} onChange={(e) => setRegName(e.target.value)}
                       placeholder="Nama lengkap beserta gelar..."
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Username *</label>
+                    <label className="text-xs font-bold text-slate-200">Username *</label>
                     <input
                       type="text" required value={regUsername} onChange={(e) => setRegUsername(e.target.value)}
-                      placeholder="username unik"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      placeholder="Username unik..."
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Email *</label>
+                    <label className="text-xs font-bold text-slate-200">Email *</label>
                     <input
                       type="email" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="email@rumahsakit.id"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      placeholder="email@rs.go.id"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                   <div className="col-span-2 space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Unit / Instalasi *</label>
+                    <label className="text-xs font-bold text-slate-200">Unit / Instalasi *</label>
                     <input
                       type="text" required value={regUnit} onChange={(e) => setRegUnit(e.target.value)}
-                      placeholder="Contoh: Lab Kimia Klinik / Patologi Anatomi"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      placeholder="Contoh: Lab Hematologi, Patologi Klinik..."
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Password *</label>
+                    <label className="text-xs font-bold text-slate-200">Password *</label>
                     <div className="relative">
                       <input
                         type={showRegPwd ? 'text' : 'password'} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)}
                         placeholder="Min. 6 karakter"
-                        className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 pr-9 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                        className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                       />
-                      <button type="button" onClick={() => setShowRegPwd(!showRegPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                      <button
+                        type="button" onClick={() => setShowRegPwd(!showRegPwd)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      >
                         {showRegPwd ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Konfirmasi Password *</label>
+                    <label className="text-xs font-bold text-slate-200">Konfirmasi Password *</label>
                     <input
-                      type="password" required value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)}
+                      type={showRegPwd ? 'text' : 'password'} required value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)}
                       placeholder="Ulangi password"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={regLoading}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 py-3 text-sm font-bold text-white hover:from-indigo-400 hover:to-indigo-500 shadow-lg shadow-indigo-500/30 transition-all disabled:opacity-60"
-                >
-                  {regLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                  <span>{regLoading ? 'Mendaftarkan...' : 'Kirim Permohonan Daftar'}</span>
-                </button>
+                <div className="pt-2">
+                  <button
+                    type="submit" disabled={regLoading}
+                    className="w-full flex items-center justify-center space-x-2 rounded-xl bg-indigo-600 py-3 text-xs font-extrabold text-white hover:bg-indigo-500 shadow-md shadow-indigo-950 transition-all disabled:opacity-60"
+                  >
+                    {regLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                    <span>{regLoading ? 'Mendaftarkan...' : 'Kirim Permohonan Akun'}</span>
+                  </button>
+                </div>
               </form>
             )}
 
             {/* === REGISTER SUCCESS === */}
             {mode === 'register-success' && (
-              <div className="text-center space-y-5 py-4">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-teal-500/15 border border-teal-500/30">
-                  <ShieldCheck className="h-8 w-8 text-teal-400" />
+              <div className="text-center space-y-4 py-4">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                  <ShieldCheck className="h-7 w-7 text-emerald-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-white">Permohonan Terkirim!</h2>
-                  <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-                    Pendaftaran akun Anda (<strong className="text-slate-300">{regUsername}</strong>) dengan Unit/Instalasi <strong className="text-teal-300">{regUnit}</strong> telah dikirim ke Super Admin untuk diverifikasi.
+                  <h2 className="text-lg font-extrabold text-white">Permohonan Terkirim!</h2>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Akun Anda telah berhasil terdaftar. Hubungi Super Admin untuk menyetujui akun Anda.
                   </p>
                 </div>
                 <button
-                  onClick={() => { setMode('login'); setRegUsername(''); setRegPassword(''); setRegConfirm(''); setRegName(''); setRegEmail(''); setRegUnit(''); }}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-teal-600 py-3 text-sm font-bold text-white hover:bg-teal-500 transition-all"
+                  onClick={() => setMode('login')}
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white hover:bg-indigo-500 transition-all"
                 >
                   <LogIn className="h-4 w-4" />
-                  <span>Kembali ke Halaman Login</span>
+                  <span>Kembali ke Form Login</span>
                 </button>
               </div>
             )}
@@ -362,90 +359,96 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <button
-                    type="button"
-                    onClick={() => setMode('login')}
-                    className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-white/10 transition"
+                    type="button" onClick={() => setMode('login')}
+                    className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <div>
-                    <h2 className="text-lg font-bold text-white">Reset Password</h2>
-                    <p className="text-xs text-slate-400">Masukkan username & email terdaftar Anda</p>
+                    <h2 className="text-lg font-extrabold text-white">Reset Password</h2>
+                    <p className="text-xs text-slate-300">Verifikasi identitas akun Anda</p>
                   </div>
                 </div>
 
                 {resetError && (
-                  <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3">
-                    <p className="text-xs text-rose-300 font-medium">{resetError}</p>
+                  <div className="rounded-xl bg-rose-950/60 border border-rose-600/50 px-4 py-3">
+                    <p className="text-xs text-rose-200 font-semibold">{resetError}</p>
                   </div>
                 )}
 
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Username *</label>
+                    <label className="text-xs font-bold text-slate-200">Username *</label>
                     <input
                       type="text" required value={resetUsername} onChange={(e) => setResetUsername(e.target.value)}
                       placeholder="Masukkan username Anda..."
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
+
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Email Terdaftar *</label>
+                    <label className="text-xs font-bold text-slate-200">Email Terdaftar *</label>
                     <input
                       type="email" required value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
-                      placeholder="email@rumahsakit.id"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      placeholder="Masukkan email Anda..."
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
+
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Password Baru *</label>
+                    <label className="text-xs font-bold text-slate-200">Password Baru *</label>
                     <div className="relative">
                       <input
                         type={showResetPwd ? 'text' : 'password'} required value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)}
                         placeholder="Min. 6 karakter"
-                        className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 pr-9 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                        className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                       />
-                      <button type="button" onClick={() => setShowResetPwd(!showResetPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                      <button
+                        type="button" onClick={() => setShowResetPwd(!showResetPwd)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      >
                         {showResetPwd ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>
+
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Konfirmasi Password Baru *</label>
+                    <label className="text-xs font-bold text-slate-200">Konfirmasi Password Baru *</label>
                     <input
-                      type="password" required value={resetConfirmPassword} onChange={(e) => setResetConfirmPassword(e.target.value)}
+                      type={showResetPwd ? 'text' : 'password'} required value={resetConfirmPassword} onChange={(e) => setResetConfirmPassword(e.target.value)}
                       placeholder="Ulangi password baru"
-                      className="w-full rounded-xl bg-white/8 border border-white/15 text-white placeholder:text-slate-600 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 transition-all"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={resetLoading}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-3 text-sm font-bold text-white hover:from-amber-400 hover:to-amber-500 shadow-lg shadow-amber-500/30 transition-all disabled:opacity-60"
-                >
-                  {resetLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                  <span>{resetLoading ? 'Memproses Reset...' : 'Reset Password Saya'}</span>
-                </button>
+                <div className="pt-2">
+                  <button
+                    type="submit" disabled={resetLoading}
+                    className="w-full flex items-center justify-center space-x-2 rounded-xl bg-indigo-600 py-3 text-xs font-extrabold text-white hover:bg-indigo-500 shadow-md shadow-indigo-950 transition-all disabled:opacity-60"
+                  >
+                    {resetLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                    <span>{resetLoading ? 'Memperbarui...' : 'Perbarui Password Saya'}</span>
+                  </button>
+                </div>
               </form>
             )}
 
             {/* === RESET SUCCESS === */}
             {mode === 'reset-success' && (
-              <div className="text-center space-y-5 py-4">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30">
-                  <KeyRound className="h-8 w-8 text-emerald-400" />
+              <div className="text-center space-y-4 py-4">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                  <KeyRound className="h-7 w-7 text-emerald-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-white">Reset Password Berhasil!</h2>
-                  <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+                  <h2 className="text-lg font-extrabold text-white">Reset Password Berhasil!</h2>
+                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
                     {resetSuccessMsg || 'Password Anda telah berhasil diperbarui.'}
                   </p>
                 </div>
                 <button
                   onClick={() => { setMode('login'); setResetUsername(''); setResetEmail(''); setResetNewPassword(''); setResetConfirmPassword(''); }}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-teal-600 py-3 text-sm font-bold text-white hover:bg-teal-500 transition-all"
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-indigo-600 py-3 text-xs font-extrabold text-white hover:bg-indigo-500 transition-all"
                 >
                   <LogIn className="h-4 w-4" />
                   <span>Masuk Sekarang</span>
@@ -455,8 +458,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
-          &copy; {new Date().getFullYear()} SI-REAGEN LRIMS · Instalasi Laboratorium
+        {/* Footer Text Requested */}
+        <p className="text-center text-xs text-slate-200 font-semibold mt-6 leading-relaxed bg-black/70 backdrop-blur-md py-3 px-4 rounded-xl border border-slate-800 shadow-lg">
+          &copy; 2026 di-diventory-Laboratorium.rsudokut created by Muhammad Didik Wahyudi
         </p>
       </div>
     </div>

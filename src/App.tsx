@@ -667,6 +667,7 @@ export default function App() {
         setIsOpenMobile={setIsMobileSidebarOpen}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
