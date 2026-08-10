@@ -117,7 +117,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       {/* Background Image - Visible Blue Lab */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
-        style={{ backgroundImage: `url('/blue_lab_login_bg.jpg')` }}
+        style={{ backgroundImage: `url('/hospital_lab_inventory_bg.jpg')` }}
       />
 
       {/* Blue Elegant Gradient Overlay - semi-transparent to reveal the image */}
