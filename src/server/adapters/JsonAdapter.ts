@@ -10,7 +10,11 @@ const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const TENANTS_FILE = path.join(DATA_DIR, 'tenants.json');
 
 function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    // Read-only filesystem on serverless platforms (e.g. Vercel)
+  }
 }
 
 function readJson<T>(filePath: string, fallback: T): T {
@@ -30,7 +34,7 @@ function writeJson<T>(filePath: string, data: T) {
     ensureDir(dir);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
-    console.error(`Error writing JSON file ${filePath}:`, err);
+    // Read-only filesystem catch
   }
 }
 
@@ -39,13 +43,17 @@ export class JsonAdapter implements IDatabaseAdapter {
   public providerLabel = 'Local JSON Storage';
 
   async init(): Promise<void> {
-    ensureDir(DATA_DIR);
-    ensureDir(TENANTS_DIR);
-    if (!fs.existsSync(TENANTS_FILE)) {
-      writeJson(TENANTS_FILE, { tenants: DEFAULT_TENANTS });
-    }
-    if (!fs.existsSync(ACCOUNTS_FILE)) {
-      writeJson(ACCOUNTS_FILE, { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] });
+    try {
+      ensureDir(DATA_DIR);
+      ensureDir(TENANTS_DIR);
+      if (!fs.existsSync(TENANTS_FILE)) {
+        writeJson(TENANTS_FILE, { tenants: DEFAULT_TENANTS });
+      }
+      if (!fs.existsSync(ACCOUNTS_FILE)) {
+        writeJson(ACCOUNTS_FILE, { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] });
+      }
+    } catch (err) {
+      console.warn('[JsonAdapter] Handled read-only filesystem init warning:', (err as any).message);
     }
   }
 
