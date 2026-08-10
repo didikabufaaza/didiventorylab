@@ -1,0 +1,68 @@
+{
+  "tenants": [
+    {
+      "id": "lab-sentral",
+      "name": "Unit Laboratorium Sentral",
+      "unit": "Laboratorium Sentral",
+      "status": "Aktif",
+      "description": "Database utama Instalasi Laboratorium RSUD",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "utdrs",
+      "name": "Unit Transfusi Darah RSUD (UTDRS)",
+      "unit": "UTDRS",
+      "status": "Aktif",
+      "description": "Database Unit Transfusi Darah Rumah Sakit",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "db-bankdarah-739",
+      "name": "Unit Bank Darah",
+      "unit": "BankDarah",
+      "description": "Unit Bank Darah",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T07:15:38.921Z"
+    },
+    {
+      "id": "db-instalasi-imuno-serologi-482",
+      "name": "Database Instalasi Imuno-Serologi",
+      "unit": "Instalasi Imuno-Serologi",
+      "description": "Database otomatis untuk unit Instalasi Imuno-Serologi",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:20:00.695Z"
+    },
+    {
+      "id": "db-gudang-reagen-272",
+      "name": "Database Gudang Reagen",
+      "unit": "Gudang Reagen",
+      "description": "Database otomatis untuk unit Gudang Reagen",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:20:00.711Z"
+    },
+    {
+      "id": "db-kimia-klinik-191",
+      "name": "Database Kimia Klinik",
+      "unit": "Kimia Klinik",
+      "description": "Database otomatis untuk unit Kimia Klinik",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:20:00.723Z"
+    },
+    {
+      "id": "db-satuan-pengawas-internal-960",
+      "name": "Database Satuan Pengawas Internal",
+      "unit": "Satuan Pengawas Internal",
+      "description": "Database otomatis untuk unit Satuan Pengawas Internal",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:20:00.728Z"
+    },
+    {
+      "id": "db-it-lab-system-309",
+      "name": "Database IT & Lab System",
+      "unit": "IT & Lab System",
+      "description": "Database otomatis untuk unit IT & Lab System",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:20:00.733Z"
+    }
+  ]
+}

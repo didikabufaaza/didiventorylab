@@ -1,0 +1,149 @@
+{
+  "accounts": [
+    {
+      "id": "usr-1",
+      "name": "Yuni Elis, S.Kep, MM",
+      "username": "yuni",
+      "email": "hendra@lab.hospital.id",
+      "role": "Manajemen",
+      "unit": "Laboratorium Sentral",
+      "status": "Aktif",
+      "password": "newpassword123",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "usr-2",
+      "name": "Siti Aminah, A.Md.AK",
+      "username": "siti",
+      "email": "siti@lab.hospital.id",
+      "role": "Admin Inventory",
+      "unit": "Gudang Reagen",
+      "status": "Aktif",
+      "password": "123456",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "usr-3",
+      "name": "Budi Santoso, S.ST",
+      "username": "budi",
+      "email": "budi@lab.hospital.id",
+      "role": "Petugas Laboratorium",
+      "unit": "Kimia Klinik",
+      "status": "Aktif",
+      "password": "password123",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "usr-5",
+      "name": "Ahmad Fauzi, SE",
+      "username": "ahmad",
+      "email": "auditor@hospital.id",
+      "role": "Auditor",
+      "unit": "Satuan Pengawas Internal",
+      "status": "Aktif",
+      "password": "password123",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "usr-admin",
+      "name": "System Administrator",
+      "username": "admin",
+      "password": "admin123",
+      "email": "admin@lrims.system",
+      "role": "Super Admin",
+      "unit": "IT & Lab System",
+      "status": "Aktif",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "usr-1786173783818",
+      "name": "Muhammad Didik Wahyudi, S.Tr.Kes",
+      "username": "didik",
+      "password": "didikok",
+      "email": "abufaaza01@gmail.com",
+      "role": "Super Admin",
+      "unit": "Laboratorium Sentral",
+      "status": "Aktif",
+      "tenantId": "lab-sentral",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "acc-utdrs-01",
+      "name": "Drs. Aditya Pratama, M.Kes",
+      "username": "aditya",
+      "password": "111",
+      "email": "aditya@utdrs.rsud.id",
+      "role": "Admin Inventory",
+      "unit": "UTDRS",
+      "tenantId": "utdrs",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "acc-utdrs-02",
+      "name": "Dewi Lestari, A.Md.AK",
+      "username": "dewi",
+      "password": "utdrs123",
+      "email": "dewi@utdrs.rsud.id",
+      "role": "Petugas Laboratorium",
+      "unit": "UTDRS",
+      "tenantId": "utdrs",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "acc-utdrs-03",
+      "name": "Dr. Surya Wibowo, Sp.PK",
+      "username": "surya",
+      "password": "utdrs123",
+      "email": "surya@utdrs.rsud.id",
+      "role": "Manajemen",
+      "unit": "UTDRS",
+      "tenantId": "utdrs",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T07:07:03.963Z"
+    },
+    {
+      "id": "acc-1786259738898",
+      "tenantId": "utdrs",
+      "name": "Ns. Test Multi-Tenant",
+      "username": "mt_test",
+      "password": "test123",
+      "email": "mt@utdrs.rs.id",
+      "role": "Admin Inventory",
+      "unit": "UTDRS",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T07:15:38.898Z"
+    },
+    {
+      "id": "acc-1786281264195",
+      "name": "Dr. Test",
+      "username": "drtest",
+      "password": "password123",
+      "email": "drtest@lab.id",
+      "role": "Petugas Laboratorium",
+      "unit": "Unit Laboratorium Sentral",
+      "tenantId": "lab-sentral",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:14:24.195Z"
+    },
+    {
+      "id": "acc-1786281667703",
+      "name": "Siti Rahma",
+      "username": "sitirahma",
+      "password": "password123",
+      "email": "sitirahma@lab.id",
+      "role": "Petugas Laboratorium",
+      "unit": "Database Instalasi Imuno-Serologi",
+      "tenantId": "db-instalasi-imuno-serologi-482",
+      "status": "Aktif",
+      "createdAt": "2026-08-09T13:21:07.703Z"
+    }
+  ],
+  "pendingUsers": []
+}

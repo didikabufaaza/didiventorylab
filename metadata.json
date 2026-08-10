@@ -1,0 +1,10 @@
+{
+  "name": "Laboratory Reagent Inventory Management System",
+  "description": "Sistem Manajemen Persediaan Reagen Laboratorium (LRIMS) - Barcode Scanner, Stock IN/OUT, FEFO, Lot Tracking, Stock Opname & Laporan Lanjutan",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
