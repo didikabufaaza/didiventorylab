@@ -18,6 +18,9 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   Boxes,
   ShieldCheck,
   FileText,
@@ -49,6 +52,8 @@ interface SidebarProps {
   lowStockCount: number;
   isOpenMobile: boolean;
   setIsOpenMobile: (open: boolean) => void;
+  isCollapsed?: boolean;
+  setIsCollapsed?: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 interface NavItem {
@@ -102,6 +107,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   lowStockCount,
   isOpenMobile,
   setIsOpenMobile,
+  isCollapsed = false,
+  setIsCollapsed,
 }) => {
   const allowedTabs = ROLE_MENU_ACCESS[userRole] || ROLE_MENU_ACCESS['Auditor'];
 
@@ -167,52 +174,82 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpenMobile && (
         <div
           onClick={() => setIsOpenMobile(false)}
-          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden transition-opacity"
         />
       )}
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-          isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
-        }`}
+        className={`fixed top-0 bottom-0 left-0 z-40 flex flex-col border-r border-slate-800 bg-slate-900 text-slate-300 transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          isCollapsed ? 'lg:w-20' : 'lg:w-64'
+        } w-64 ${isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-5 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white shadow-md shadow-indigo-950/40">
+        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4 shrink-0">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 font-bold text-white shadow-md shadow-indigo-950/50 ring-1 ring-indigo-400/30">
               <FlaskConical className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="font-bold text-base text-white tracking-tight">LabStock Pro</h1>
-              <p className="text-[10px] font-medium text-slate-400">Inventory & Lot FEFO System</p>
-            </div>
+            {!isCollapsed && (
+              <div className="truncate transition-opacity duration-200">
+                <h1 className="font-extrabold text-base text-white tracking-tight leading-none">
+                  LabStock <span className="text-indigo-400">Pro</span>
+                </h1>
+                <p className="text-[10px] font-medium text-slate-400 mt-0.5">Inventory & Lot FEFO</p>
+              </div>
+            )}
           </div>
+
+          {/* Desktop Collapse Icon Button */}
+          {setIsCollapsed && (
+            <button
+              onClick={() => setIsCollapsed((prev) => !prev)}
+              className="hidden lg:flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors border border-transparent hover:border-slate-700"
+              title={isCollapsed ? 'Perluas Sidebar (Ctrl + B)' : 'Ciutkan Sidebar (Ctrl + B)'}
+            >
+              {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          )}
+
+          {/* Mobile Close Button */}
           <button
             onClick={() => setIsOpenMobile(false)}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 lg:hidden"
+            title="Tutup Menu Sidebar"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* User Role Info Banner */}
-        <div className="mx-4 my-3 rounded-xl border border-slate-800 bg-slate-800/50 px-3.5 py-2 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 font-medium">Akses Role:</span>
-            <span className="rounded-md bg-indigo-950 border border-indigo-800/60 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
-              {userRole}
+        <div
+          className={`mx-3 my-3 rounded-xl border border-slate-800 bg-slate-800/40 p-2 text-xs transition-all ${
+            isCollapsed ? 'lg:px-1.5 lg:text-center' : 'px-3 py-2'
+          }`}
+        >
+          <div className={`flex items-center ${isCollapsed ? 'lg:justify-center' : 'justify-between'}`}>
+            {!isCollapsed && <span className="text-[11px] text-slate-400 font-medium">Akses Role:</span>}
+            <span
+              className="rounded-md bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 text-[10px] font-bold text-indigo-300 truncate"
+              title={`Role Saat Ini: ${userRole}`}
+            >
+              {isCollapsed ? userRole.split(' ')[0] : userRole}
             </span>
           </div>
         </div>
 
         {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-2.5 py-2 space-y-4 custom-scrollbar">
           {navItems.map((group, idx) => (
             <div key={idx} className="space-y-1">
-              <p className="px-3 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-                {group.group}
-              </p>
+              {!isCollapsed ? (
+                <p className="px-3 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                  {group.group}
+                </p>
+              ) : (
+                <div className="hidden lg:block my-2 border-t border-slate-800/80" />
+              )}
+
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -220,17 +257,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={item.id}
                     onClick={() => handleSelect(item.id)}
-                    className={`group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${
+                    title={isCollapsed ? item.label : undefined}
+                    className={`group relative flex w-full items-center rounded-xl py-2.5 text-xs font-medium transition-all ${
+                      isCollapsed ? 'lg:justify-center lg:px-2 px-3' : 'justify-between px-3'
+                    } ${
                       isActive
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/40 font-semibold ring-1 ring-indigo-400/40'
                         : item.highlight
                         ? 'text-indigo-300 hover:bg-slate-800 hover:text-white'
-                        : 'text-slate-300 hover:bg-slate-800 transition-colors'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
                       <Icon
-                        className={`h-4 w-4 shrink-0 transition-colors ${
+                        className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-110 ${
                           isActive
                             ? 'text-white'
                             : item.highlight
@@ -238,21 +278,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-400 group-hover:text-slate-200'
                         }`}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className={`truncate ${isCollapsed ? 'lg:hidden' : 'inline'}`}>
+                        {item.label}
+                      </span>
                     </div>
 
-                    <div className="flex items-center space-x-1.5">
+                    {/* Badges */}
+                    <div className={`flex items-center space-x-1.5 ${isCollapsed ? 'lg:hidden' : 'flex'}`}>
                       {item.badge && (
                         <span className="rounded-md bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-bold text-indigo-300">
                           {item.badge}
                         </span>
                       )}
                       {item.badgeAlert !== undefined && item.badgeAlert > 0 && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500/90 px-1.5 text-[10px] font-extrabold text-white">
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500/90 px-1.5 text-[10px] font-extrabold text-white shadow-xs">
                           {item.badgeAlert}
                         </span>
                       )}
                     </div>
+
+                    {/* Mini Badge Dot when Collapsed */}
+                    {isCollapsed && item.badgeAlert !== undefined && item.badgeAlert > 0 && (
+                      <span className="hidden lg:block absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-slate-900 animate-pulse" />
+                    )}
                   </button>
                 );
               })}
@@ -261,11 +309,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-slate-800 p-4 bg-slate-900/50 text-[11px] text-slate-500 text-center shrink-0">
-          <p className="font-semibold text-slate-400">LabStock Pro v1.0</p>
-          <p className="text-[10px]">Hospital Reagent Management</p>
+        <div
+          className={`border-t border-slate-800 p-3 bg-slate-900/60 text-[11px] text-slate-500 text-center shrink-0 ${
+            isCollapsed ? 'lg:px-1 lg:py-2' : ''
+          }`}
+        >
+          <p className="font-semibold text-slate-400 truncate">
+            {isCollapsed ? 'v1.0' : 'LabStock Pro v1.0'}
+          </p>
+          {!isCollapsed && <p className="text-[10px] text-slate-500">Hospital Reagent Management</p>}
         </div>
       </aside>
     </>
   );
 };
+

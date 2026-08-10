@@ -134,7 +134,36 @@ export default function App() {
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lrims_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('lrims_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Shortcut Keyboard Ctrl + B / Cmd + B untuk toggle Sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleSidebar]);
 
   // Confirmation Modal State & Inputs
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -636,6 +665,8 @@ export default function App() {
         lowStockCount={lowStockCount}
         isOpenMobile={isMobileSidebarOpen}
         setIsOpenMobile={setIsMobileSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
       />
 
       {/* Main Content Area */}
@@ -659,6 +690,9 @@ export default function App() {
           accounts={accounts}
           onSwitchAccount={handleSwitchAccount}
           impersonatedBy={impersonatedBy}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
+          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
         />
 
         {/* Main Route Content View */}

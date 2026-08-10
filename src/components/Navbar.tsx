@@ -10,6 +10,9 @@ import {
   Users,
   ChevronDown,
   Database,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { UserRole, SystemNotification, User } from '../types.js';
 
@@ -31,6 +34,9 @@ interface NavbarProps {
   accounts?: User[];
   onSwitchAccount?: (account: User) => Promise<void> | void;
   impersonatedBy?: string | null;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onOpenMobileSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -51,6 +57,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   accounts = [],
   onSwitchAccount,
   impersonatedBy,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  onOpenMobileSidebar,
 }) => {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const roles: UserRole[] = [
@@ -88,9 +97,37 @@ export const Navbar: React.FC<NavbarProps> = ({
   })();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-4 md:px-8 shrink-0 shadow-xs">
-      {/* Search & Quick Action Bar */}
-      <div className="flex items-center space-x-3 flex-1 max-w-xl">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-3 md:px-6 shrink-0 shadow-xs">
+      {/* Sidebar Toggle & Search Bar */}
+      <div className="flex items-center space-x-2.5 flex-1 max-w-xl">
+        {/* Mobile Hamburger Drawer Toggle Button */}
+        <button
+          onClick={onOpenMobileSidebar}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100/90 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-slate-200/80 shrink-0 lg:hidden shadow-xs"
+          title="Buka Menu Sidebar (Mobile)"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        {/* Desktop Sidebar Collapse Toggle Panel/Button */}
+        <button
+          onClick={onToggleSidebar}
+          className="hidden lg:flex items-center space-x-2 rounded-xl bg-slate-100/90 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200/80 transition-all shadow-xs shrink-0 group"
+          title={isSidebarCollapsed ? 'Tampilkan Sidebar Penuh (Ctrl + B)' : 'Ciutkan Sidebar (Ctrl + B)'}
+        >
+          {isSidebarCollapsed ? (
+            <>
+              <PanelLeftOpen className="h-4 w-4 text-indigo-600 group-hover:scale-110 transition-transform" />
+              <span className="text-slate-600 group-hover:text-indigo-700">Tampilkan Menu</span>
+            </>
+          ) : (
+            <>
+              <PanelLeftClose className="h-4 w-4 text-slate-500 group-hover:text-indigo-600 group-hover:scale-110 transition-transform" />
+              <span className="text-slate-600 group-hover:text-indigo-700">Ciutkan Menu</span>
+            </>
+          )}
+        </button>
+
         <form onSubmit={onSearchSubmit} className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -98,11 +135,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             value={globalSearch}
             onChange={(e) => setGlobalSearch(e.target.value)}
             placeholder="Cari reagen, lot, barcode, atau supplier..."
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-24 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-20 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
           />
           <button
             type="submit"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-indigo-700 transition-colors shadow-xs"
           >
             Cari
           </button>
@@ -112,10 +149,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {!isManagement && (
           <button
             onClick={onOpenBarcodeScanner}
-            className="hidden sm:flex items-center space-x-2 rounded-lg bg-indigo-50 text-indigo-700 px-3.5 py-2 text-xs font-medium border border-indigo-100 hover:bg-indigo-100 transition-colors shrink-0"
+            className="hidden sm:flex items-center space-x-1.5 rounded-xl bg-indigo-50 text-indigo-700 px-3 py-2 text-xs font-semibold border border-indigo-100 hover:bg-indigo-100 transition-colors shrink-0"
           >
             <Scan className="h-4 w-4 text-indigo-600" />
-            <span>Scan Barcode</span>
+            <span className="hidden xl:inline">Scan Barcode</span>
           </button>
         )}
       </div>
