@@ -771,8 +771,12 @@ export interface TenantsState {
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(TENANTS_DIR)) fs.mkdirSync(TENANTS_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(TENANTS_DIR)) fs.mkdirSync(TENANTS_DIR, { recursive: true });
+  } catch (err) {
+    // Read-only filesystem on serverless environments (e.g. Vercel)
+  }
 }
 
 function readJsonFile<T>(file: string, fallback: T): T {
@@ -787,8 +791,12 @@ function readJsonFile<T>(file: string, fallback: T): T {
 }
 
 function writeJsonFile(file: string, value: unknown) {
-  ensureDataDir();
-  fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf-8');
+  try {
+    ensureDataDir();
+    fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf-8');
+  } catch (err) {
+    // Catch read-only filesystem on Vercel
+  }
 }
 
 function getTenantDir(tenantId: string) {
@@ -800,8 +808,10 @@ function getTenantFile(tenantId: string) {
 
 // --- Registry Tenant ---
 function getTenantsState(): TenantsState {
-  const fallback: TenantsState = { tenants: [] };
-  return readJsonFile(TENANTS_FILE, fallback);
+  const fallback: TenantsState = { tenants: DEFAULT_TENANTS };
+  const res = readJsonFile(TENANTS_FILE, fallback);
+  if (!res || !Array.isArray(res.tenants) || res.tenants.length === 0) return fallback;
+  return res;
 }
 function saveTenantsState(tenants: TenantInfo[]) {
   writeJsonFile(TENANTS_FILE, { tenants });
@@ -812,8 +822,10 @@ function tenantExists(id: string): boolean {
 
 // --- Registry Akun Global ---
 function getAccountsState(): AccountsState {
-  const fallback: AccountsState = { accounts: [], pendingUsers: [] };
-  return readJsonFile(ACCOUNTS_FILE, fallback);
+  const fallback: AccountsState = { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
+  const res = readJsonFile(ACCOUNTS_FILE, fallback);
+  if (!res || !Array.isArray(res.accounts) || res.accounts.length === 0) return fallback;
+  return res;
 }
 function saveAccountsState(state: AccountsState) {
   writeJsonFile(ACCOUNTS_FILE, state);
@@ -1012,38 +1024,42 @@ function migrateLegacyToMultiTenant() {
 }
 
 function ensureMultiTenantInitialized() {
-  ensureDataDir();
-  if (!fs.existsSync(ACCOUNTS_FILE) || !fs.existsSync(TENANTS_FILE)) {
-    migrateLegacyToMultiTenant();
-  }
-  // Pastikan tenant seeded ada
-  if (!tenantExists('lab-sentral') || !tenantExists('utdrs')) {
-    const state = getTenantsState();
-    const names: Record<string, string> = {
-      'lab-sentral': 'Unit Laboratorium Sentral',
-      'utdrs': 'Unit Transfusi Darah RSUD (UTDRS)',
-    };
-    for (const id of ['lab-sentral', 'utdrs']) {
-      if (!state.tenants.some((t) => t.id === id)) {
-        state.tenants.push({
-          id,
-          name: names[id],
-          unit: id === 'lab-sentral' ? 'Laboratorium Sentral' : 'UTDRS',
-          status: 'Aktif',
-          createdAt: new Date().toISOString(),
-        });
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(ACCOUNTS_FILE) || !fs.existsSync(TENANTS_FILE)) {
+      migrateLegacyToMultiTenant();
+    }
+    // Pastikan tenant seeded ada
+    if (!tenantExists('lab-sentral') || !tenantExists('utdrs')) {
+      const state = getTenantsState();
+      const names: Record<string, string> = {
+        'lab-sentral': 'Unit Laboratorium Sentral',
+        'utdrs': 'Unit Transfusi Darah RSUD (UTDRS)',
+      };
+      for (const id of ['lab-sentral', 'utdrs']) {
+        if (!state.tenants.some((t) => t.id === id)) {
+          state.tenants.push({
+            id,
+            name: names[id],
+            unit: id === 'lab-sentral' ? 'Laboratorium Sentral' : 'UTDRS',
+            status: 'Aktif',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      saveTenantsState(state.tenants);
+    }
+    // Pastikan file DB tiap tenant ada
+    for (const t of getTenantsState().tenants) {
+      if (!fs.existsSync(getTenantFile(t.id))) {
+        ensureTenantFileFor(t.id);
       }
     }
-    saveTenantsState(state.tenants);
+    ensureTenantFileFor('lab-sentral');
+    ensureTenantFileFor('utdrs');
+  } catch (err) {
+    console.warn('[ensureMultiTenantInitialized] Handled read-only filesystem:', (err as any).message);
   }
-  // Pastikan file DB tiap tenant ada
-  for (const t of getTenantsState().tenants) {
-    if (!fs.existsSync(getTenantFile(t.id))) {
-      ensureTenantFileFor(t.id);
-    }
-  }
-  ensureTenantFileFor('lab-sentral');
-  ensureTenantFileFor('utdrs');
 }
 
 function ensureTenantFileFor(tenantId: string) {

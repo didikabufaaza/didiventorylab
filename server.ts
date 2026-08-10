@@ -203,18 +203,23 @@ app.use('/api', (req, res, next) => {
 
   // AUTH ROUTES
   app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = accountStore.findByUsername(username || '');
-    if (!user || user.password !== password || user.status !== 'Aktif') {
-      res.status(401).json({ error: 'Username atau password salah, atau akun tidak aktif.' });
-      return;
+    try {
+      const { username, password } = req.body || {};
+      const user = accountStore.findByUsername(username || '');
+      if (!user || user.password !== password || user.status !== 'Aktif') {
+        res.status(401).json({ error: 'Username atau password salah, atau akun tidak aktif.' });
+        return;
+      }
+      const tenant = tenantStore.find(user.tenantId || 'lab-sentral');
+      const token = `tok_${Date.now()}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      sessions.set(token, { accountId: user.id });
+      db.bind(user.tenantId || 'lab-sentral');
+      const { password: _pw, ...safeUser } = user;
+      res.json({ user: { ...safeUser, tenantName: tenant?.name || '' }, token });
+    } catch (err: any) {
+      console.error('[Login Route Exception]:', err);
+      res.status(500).json({ error: err.message || 'Terjadi kesalahan pada server saat login.' });
     }
-    const tenant = tenantStore.find(user.tenantId || 'lab-sentral');
-    const token = `tok_${Date.now()}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-    sessions.set(token, { accountId: user.id });
-    db.bind(user.tenantId || 'lab-sentral');
-    const { password: _pw, ...safeUser } = user;
-    res.json({ user: { ...safeUser, tenantName: tenant?.name || '' }, token });
   });
 
   // Helper untuk memastikan semua Unit / Instalasi yang terdaftar punya Database Tenant
