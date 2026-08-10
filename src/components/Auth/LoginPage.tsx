@@ -113,19 +113,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-black text-white">
-      {/* Background Image with Dark Overlay */}
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden text-white">
+      {/* Background Image - Visible Blue Lab */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-1000 brightness-75 contrast-125 opacity-40 scale-105"
-        style={{ backgroundImage: `url('/lab_login_bg.jpg')` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/80 to-black/95 backdrop-blur-[2px]" />
-      </div>
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+        style={{ backgroundImage: `url('/blue_lab_login_bg.jpg')` }}
+      />
 
-      {/* Glow Effects */}
+      {/* Blue Elegant Gradient Overlay - semi-transparent to reveal the image */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/80 via-blue-900/70 to-indigo-950/85" />
+      <div className="absolute inset-0 bg-gradient-to-t from-blue-950/60 via-transparent to-blue-900/40" />
+
+      {/* Animated Glow Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-600/20 blur-3xl animate-pulse" />
-        <div className="absolute top-1/3 -right-40 w-80 h-80 rounded-full bg-blue-600/20 blur-3xl animate-pulse delay-1000" />
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+        <div className="absolute top-1/3 -right-40 w-96 h-96 rounded-full bg-cyan-500/15 blur-3xl animate-pulse" style={{animationDelay:'1.2s'}} />
+        <div className="absolute -bottom-32 left-1/4 w-80 h-80 rounded-full bg-indigo-500/20 blur-3xl animate-pulse" style={{animationDelay:'2.4s'}} />
       </div>
 
       {/* Main card */}
@@ -145,9 +148,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <p className="text-sm text-indigo-300 font-semibold mt-1">didik-digital inventory</p>
         </div>
 
-        {/* Form Card (Black Theme & High Contrast) */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/90 backdrop-blur-xl shadow-2xl shadow-black ring-1 ring-slate-800 overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-indigo-500 via-blue-500 to-indigo-600" />
+        {/* Form Card (Blue Elegant Theme) */}
+        <div className="rounded-2xl border border-blue-700/50 bg-blue-950/85 backdrop-blur-xl shadow-2xl shadow-blue-950 ring-1 ring-blue-600/30 overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500" />
 
           <div className="p-7">
             {/* === LOGIN FORM === */}
@@ -174,7 +177,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
                     placeholder="Masukkan username..."
-                    className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-4 py-3 text-sm font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                    className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-4 py-3 text-sm font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/30 transition-all"
                   />
                 </div>
 
@@ -196,7 +199,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="Masukkan password..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-4 py-3 pr-12 text-sm font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                  className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-4 py-3 pr-12 text-sm font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/30 transition-all"
                     />
                     <button
                       type="button"
@@ -222,15 +225,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </button>
 
                 <div className="relative flex items-center py-1">
-                  <div className="flex-1 h-px bg-slate-800" />
-                  <span className="px-3 text-xs font-semibold text-slate-400">atau</span>
-                  <div className="flex-1 h-px bg-slate-800" />
+                  <div className="flex-1 h-px bg-blue-800/60" />
+                  <span className="px-3 text-xs font-semibold text-blue-300/80">atau</span>
+                  <div className="flex-1 h-px bg-blue-800/60" />
                 </div>
 
                 <button
                   type="button"
                   onClick={() => { setMode('register'); setRegError(''); }}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl border border-slate-700 bg-slate-900/80 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition-all"
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl border border-blue-600/60 bg-blue-900/50 py-3 text-sm font-bold text-blue-100 hover:bg-blue-800/70 hover:text-white transition-all"
                 >
                   <UserPlus className="h-4 w-4" />
                   <span>Daftar Akun Baru</span>
@@ -267,7 +270,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text" required value={regName} onChange={(e) => setRegName(e.target.value)}
                       placeholder="Nama lengkap beserta gelar..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -275,7 +278,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text" required value={regUsername} onChange={(e) => setRegUsername(e.target.value)}
                       placeholder="Username unik..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -283,7 +286,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="email" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="email@rs.go.id"
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                   <div className="col-span-2 space-y-1">
@@ -291,7 +294,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text" required value={regUnit} onChange={(e) => setRegUnit(e.target.value)}
                       placeholder="Contoh: Lab Hematologi, Patologi Klinik..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -300,7 +303,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <input
                         type={showRegPwd ? 'text' : 'password'} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)}
                         placeholder="Min. 6 karakter"
-                        className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                       />
                       <button
                         type="button" onClick={() => setShowRegPwd(!showRegPwd)}
@@ -315,7 +318,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type={showRegPwd ? 'text' : 'password'} required value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)}
                       placeholder="Ulangi password"
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                 </div>
@@ -382,7 +385,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text" required value={resetUsername} onChange={(e) => setResetUsername(e.target.value)}
                       placeholder="Masukkan username Anda..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
 
@@ -391,7 +394,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type="email" required value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
                       placeholder="Masukkan email Anda..."
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
 
@@ -401,7 +404,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       <input
                         type={showResetPwd ? 'text' : 'password'} required value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)}
                         placeholder="Min. 6 karakter"
-                        className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 pr-9 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                       />
                       <button
                         type="button" onClick={() => setShowResetPwd(!showResetPwd)}
@@ -417,7 +420,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <input
                       type={showResetPwd ? 'text' : 'password'} required value={resetConfirmPassword} onChange={(e) => setResetConfirmPassword(e.target.value)}
                       placeholder="Ulangi password baru"
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-blue-900/60 border border-blue-700/60 text-white placeholder:text-blue-300/50 px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all"
                     />
                   </div>
                 </div>
@@ -459,7 +462,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
 
         {/* Footer Text Requested */}
-        <p className="text-center text-xs text-slate-200 font-semibold mt-6 leading-relaxed bg-black/70 backdrop-blur-md py-3 px-4 rounded-xl border border-slate-800 shadow-lg">
+        <p className="text-center text-xs text-blue-100 font-semibold mt-6 leading-relaxed bg-blue-950/70 backdrop-blur-md py-3 px-4 rounded-xl border border-blue-700/50 shadow-lg">
           &copy; 2026 di-diventory-Laboratorium.rsudokut created by Muhammad Didik Wahyudi
         </p>
       </div>
