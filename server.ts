@@ -23,75 +23,100 @@ export async function buildApp() {
 
   // Sesi token (token -> { accountId, impersonatedBy? }). Disimpan in-memory saat login.
   interface SessionInfo {
-  accountId: string;
-  impersonatedBy?: string;
-}
-const sessions = new Map<string, SessionInfo>();
+    accountId: string;
+    impersonatedBy?: string;
+  }
+  const sessions = new Map<string, SessionInfo>();
 
-// Peran efektif mengikuti peran akun yang sedang login (impersonasi murni).
-// Saat Super Admin memilih "Lihat Akun Sebagai", peran pada sesi baru menjadi
-// peran akun yang dilihat, sehingga menu & hak akses sesuai akun tersebut.
-const getEffectiveRole = (account: User) => account.role;
+  function generateToken(sessionData: SessionInfo): string {
+    const jsonStr = JSON.stringify(sessionData);
+    const tokenPayload = Buffer.from(jsonStr, 'utf-8').toString('base64url');
+    const token = `tok_v2_${tokenPayload}`;
+    sessions.set(token, sessionData);
+    return token;
+  }
 
-const denyAccess = (res: express.Response, role?: string) => {
-  const msg = role ? `Akses ditolak: peran '${role}' tidak memiliki izin untuk tindakan ini.` : 'Akses ditolak: tindakan ini tidak diizinkan untuk peran Anda.';
-  res.status(403).json({ error: msg });
-};
+  function resolveSession(token: string): SessionInfo | undefined {
+    if (!token) return undefined;
+    if (sessions.has(token)) return sessions.get(token);
+    try {
+      if (token.startsWith('tok_v2_')) {
+        const jsonStr = Buffer.from(token.slice(7), 'base64url').toString('utf-8');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && typeof parsed.accountId === 'string') {
+          return { accountId: parsed.accountId, impersonatedBy: parsed.impersonatedBy };
+        }
+      }
+    } catch (err) {
+      // Invalid token
+    }
+    return undefined;
+  }
 
-const pushAudit = (
-  tenantId: string,
-  entry: { action: string; module?: string; targetId?: string; details: string }
-) => {
-  if (!tenantId || !tenantStoreAllExists(tenantId)) return;
-  const prev = db.current();
-  db.bind(tenantId);
-  const data = db.get();
-  data.auditLogs.unshift({
-    id: `audn-${Date.now()}`,
-    timestamp: new Date().toLocaleString('id-ID'),
-    userId: 'usr-admin',
-    userName: 'Super Admin',
-    userRole: 'Super Admin',
-    action: entry.action,
-    module: entry.module || 'Manajemen User',
-    targetId: entry.targetId || '',
-    details: entry.details,
-  });
-  db.save();
-  db.bind(prev);
-};
+  // Peran efektif mengikuti peran akun yang sedang login (impersonasi murni).
+  // Saat Super Admin memilih "Lihat Akun Sebagai", peran pada sesi baru menjadi
+  // peran akun yang dilihat, sehingga menu & hak akses sesuai akun tersebut.
+  const getEffectiveRole = (account: User) => account.role;
 
-function tenantStoreAllExists(tenantId: string): boolean {
-  return !!tenantStore.find(tenantId);
-}
+  const denyAccess = (res: express.Response, role?: string) => {
+    const msg = role ? `Akses ditolak: peran '${role}' tidak memiliki izin untuk tindakan ini.` : 'Akses ditolak: tindakan ini tidak diizinkan untuk peran Anda.';
+    res.status(403).json({ error: msg });
+  };
 
-// ============================================================
-// KONTEKS MULTI-TENANT & PENEGAKAN PERAN SISI SERVER
-// 1) Bind DB ke tenant milik akun yang sedang login (privat).
-// 2) Semua mutasi (POST/PUT/DELETE) wajib punya sesi.
-// 3) Manajemen User/Akun & Tenant hanya boleh oleh Super Admin.
-// 4) Peran read-only (Manajemen/Auditor) tidak boleh mutasi
-//    kecuali pengecualian khusus.
-// ============================================================
-app.use('/api', (req, res, next) => {
-  const fullUrl = req.originalUrl.split('?')[0];
+  const pushAudit = (
+    tenantId: string,
+    entry: { action: string; module?: string; targetId?: string; details: string }
+  ) => {
+    if (!tenantId || !tenantStoreAllExists(tenantId)) return;
+    const prev = db.current();
+    db.bind(tenantId);
+    const data = db.get();
+    data.auditLogs.unshift({
+      id: `audn-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID'),
+      userId: 'usr-admin',
+      userName: 'Super Admin',
+      userRole: 'Super Admin',
+      action: entry.action,
+      module: entry.module || 'Manajemen User',
+      targetId: entry.targetId || '',
+      details: entry.details,
+    });
+    db.save();
+    db.bind(prev);
+  };
 
-  // Public endpoints
-  const isPublic =
-    fullUrl === '/api/auth/login' ||
-    fullUrl === '/api/auth/register' ||
-    fullUrl === '/api/auth/reset-password' ||
-    fullUrl === '/api/health';
+  function tenantStoreAllExists(tenantId: string): boolean {
+    return !!tenantStore.find(tenantId);
+  }
 
-  // Endpoint publik (login/register/health) selalu lewat tanpa enforcement sesi.
-  if (isPublic) return next();
+  // ============================================================
+  // KONTEKS MULTI-TENANT & PENEGAKAN PERAN SISI SERVER
+  // 1) Bind DB ke tenant milik akun yang sedang login (privat).
+  // 2) Semua mutasi (POST/PUT/DELETE) wajib punya sesi.
+  // 3) Manajemen User/Akun & Tenant hanya boleh oleh Super Admin.
+  // 4) Peran read-only (Manajemen/Auditor) tidak boleh mutasi
+  //    kecuali pengecualian khusus.
+  // ============================================================
+  app.use('/api', (req, res, next) => {
+    const fullUrl = req.originalUrl.split('?')[0];
 
-  // Resolusi sesi -> akun global & bind tenant (berlaku untuk SEMUA request).
-  // Tanpa sesi valid, bind tenant default 'lab-sentral' (guests/visual) sehingga
-  // tidak pernah memakai tenant milik pengguna lain.
-  const auth = req.headers.authorization || '';
-  const token = auth.replace(/^Bearer\s+/i, '');
-  const session = token ? sessions.get(token) : undefined;
+    // Public endpoints
+    const isPublic =
+      fullUrl === '/api/auth/login' ||
+      fullUrl === '/api/auth/register' ||
+      fullUrl === '/api/auth/reset-password' ||
+      fullUrl === '/api/health';
+
+    // Endpoint publik (login/register/health) selalu lewat tanpa enforcement sesi.
+    if (isPublic) return next();
+
+    // Resolusi sesi -> akun global & bind tenant (berlaku untuk SEMUA request).
+    // Tanpa sesi valid, bind tenant default 'lab-sentral' (guests/visual) sehingga
+    // tidak pernah memakai tenant milik pengguna lain.
+    const auth = req.headers.authorization || '';
+    const token = auth.replace(/^Bearer\s+/i, '');
+    const session = resolveSession(token);
   if (session) {
     const account = accountStore.findById(session.accountId);
     if (account && account.status === 'Aktif') {
@@ -210,8 +235,7 @@ app.use('/api', (req, res, next) => {
         return;
       }
       const tenant = tenantStore.find(user.tenantId || 'lab-sentral');
-      const token = `tok_${Date.now()}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-      sessions.set(token, { accountId: user.id });
+      const token = generateToken({ accountId: user.id });
       db.bind(user.tenantId || 'lab-sentral');
       const { password: _pw, ...safeUser } = user;
       res.json({ user: { ...safeUser, tenantName: tenant?.name || '' }, token });
@@ -445,8 +469,7 @@ app.use('/api', (req, res, next) => {
     const realAdminAccount = accountStore.findById(realAdminId);
     const isReturningToAdmin = target.id === realAdminId;
 
-    const token = `tok_${Date.now()}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-    sessions.set(token, {
+    const token = generateToken({
       accountId: target.id,
       impersonatedBy: isReturningToAdmin ? undefined : realAdminId,
     });
