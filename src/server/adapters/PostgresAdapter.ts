@@ -67,12 +67,6 @@ export class PostgresAdapter implements IDatabaseAdapter {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
-        CREATE TABLE IF NOT EXISTS lrims_accounts (
-          key_name VARCHAR(100) PRIMARY KEY,
-          payload JSONB NOT NULL,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
         CREATE TABLE IF NOT EXISTS lrims_tenant_data (
           tenant_id VARCHAR(255) PRIMARY KEY,
           payload JSONB NOT NULL,
@@ -130,6 +124,92 @@ export class PostgresAdapter implements IDatabaseAdapter {
         );
       `);
 
+      // Relational lrims_accounts: check if old JSONB format exists
+      const acctTableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.columns
+          WHERE table_name = 'lrims_accounts' AND column_name = 'key_name'
+        ) as has_key_name
+      `);
+      const isOldFormat = acctTableCheck.rows[0].has_key_name;
+
+      if (isOldFormat) {
+        // Migrate from old JSONB to relational
+        console.log('[DB Init] Migrating lrims_accounts from JSONB to relational...');
+        const oldData = await client.query("SELECT payload FROM lrims_accounts WHERE key_name = 'global_accounts'");
+        const payload = oldData.rows[0]?.payload || {};
+        const accounts: User[] = payload.accounts || DEFAULT_ACCOUNTS;
+        const pendingUsers: PendingUser[] = payload.pendingUsers || [];
+
+        // Drop old table and recreate
+        await client.query('DROP TABLE lrims_accounts');
+        await client.query(`
+          CREATE TABLE lrims_accounts (
+            id VARCHAR(255) PRIMARY KEY,
+            name TEXT NOT NULL,
+            username VARCHAR(100) NOT NULL,
+            password VARCHAR(255) DEFAULT '',
+            email VARCHAR(255) DEFAULT '',
+            role VARCHAR(50) DEFAULT 'Petugas Laboratorium',
+            unit VARCHAR(100),
+            status VARCHAR(50) DEFAULT 'Aktif',
+            tenant_id VARCHAR(255),
+            tenant_name VARCHAR(255),
+            created_by VARCHAR(255),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            requested_role VARCHAR(50),
+            registered_at TIMESTAMPTZ,
+            message TEXT,
+            account_type VARCHAR(20) NOT NULL DEFAULT 'active',
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+
+        // Insert active accounts
+        for (const a of accounts) {
+          await client.query(
+            `INSERT INTO lrims_accounts (id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at, account_type, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [a.id, a.name, a.username, a.password || '', a.email || '', a.role, a.unit, a.status || 'Aktif', a.tenantId || null, a.tenantName || null, a.createdBy || null, a.createdAt || new Date().toISOString()]
+          );
+        }
+
+        // Insert pending users
+        for (const p of pendingUsers) {
+          await client.query(
+            `INSERT INTO lrims_accounts (id, name, username, password, email, unit, requested_role, registered_at, tenant_id, message, account_type, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [p.id, p.name, p.username, p.password, p.email || '', p.unit, p.requestedRole, p.registeredAt, p.tenantId || null, p.message || null]
+          );
+        }
+        console.log(`[DB Init] Migrated ${accounts.length} active + ${pendingUsers.length} pending accounts to relational table.`);
+      } else {
+        // Create if not exists (fresh install)
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS lrims_accounts (
+            id VARCHAR(255) PRIMARY KEY,
+            name TEXT NOT NULL,
+            username VARCHAR(100) NOT NULL,
+            password VARCHAR(255) DEFAULT '',
+            email VARCHAR(255) DEFAULT '',
+            role VARCHAR(50) DEFAULT 'Petugas Laboratorium',
+            unit VARCHAR(100),
+            status VARCHAR(50) DEFAULT 'Aktif',
+            tenant_id VARCHAR(255),
+            tenant_name VARCHAR(255),
+            created_by VARCHAR(255),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            requested_role VARCHAR(50),
+            registered_at TIMESTAMPTZ,
+            message TEXT,
+            account_type VARCHAR(20) NOT NULL DEFAULT 'active',
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+      }
+
       // Seed Initial Tenants if empty
       const tenantCheck = await client.query('SELECT COUNT(*) FROM lrims_tenants');
       if (parseInt(tenantCheck.rows[0].count, 10) === 0) {
@@ -144,14 +224,16 @@ export class PostgresAdapter implements IDatabaseAdapter {
       }
 
       // Seed Initial Accounts if empty
-      const accountsCheck = await client.query("SELECT COUNT(*) FROM lrims_accounts WHERE key_name = 'global_accounts'");
+      const accountsCheck = await client.query("SELECT COUNT(*) FROM lrims_accounts WHERE account_type = 'active'");
       if (parseInt(accountsCheck.rows[0].count, 10) === 0) {
-        await client.query(
-          `INSERT INTO lrims_accounts (key_name, payload, updated_at)
-           VALUES ('global_accounts', $1, NOW())
-           ON CONFLICT (key_name) DO UPDATE SET payload = EXCLUDED.payload`,
-          [JSON.stringify({ accounts: DEFAULT_ACCOUNTS, pendingUsers: [] })]
-        );
+        for (const a of DEFAULT_ACCOUNTS) {
+          await client.query(
+            `INSERT INTO lrims_accounts (id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at, account_type, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [a.id, a.name, a.username, a.password || '', a.email || '', a.role, a.unit, a.status || 'Aktif', a.tenantId || null, a.tenantName || null, a.createdBy || null, a.createdAt || new Date().toISOString()]
+          );
+        }
       }
 
       // Seed Initial Tenant Data (Master Reagents, Batches, POs, etc.) if empty
@@ -238,16 +320,46 @@ export class PostgresAdapter implements IDatabaseAdapter {
 
   async getAccounts(): Promise<{ accounts: User[]; pendingUsers: PendingUser[] }> {
     try {
-      const res = await this.pool.query("SELECT payload FROM lrims_accounts WHERE key_name = 'global_accounts'");
-      if (res.rows.length === 0) {
+      const activeRes = await this.pool.query(
+        "SELECT id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at FROM lrims_accounts WHERE account_type = 'active' ORDER BY created_at ASC"
+      );
+      const pendingRes = await this.pool.query(
+        "SELECT id, name, username, password, email, unit, requested_role, registered_at, tenant_id, message FROM lrims_accounts WHERE account_type = 'pending' ORDER BY registered_at ASC"
+      );
+
+      const accounts: User[] = activeRes.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        username: r.username,
+        password: r.password,
+        email: r.email,
+        role: r.role,
+        unit: r.unit,
+        status: r.status,
+        tenantId: r.tenant_id || undefined,
+        tenantName: r.tenant_name || undefined,
+        createdBy: r.created_by || undefined,
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+      }));
+
+      const pendingUsers: PendingUser[] = pendingRes.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        username: r.username,
+        password: r.password,
+        email: r.email,
+        unit: r.unit,
+        requestedRole: r.requested_role,
+        registeredAt: r.registered_at ? new Date(r.registered_at).toISOString() : new Date().toISOString(),
+        tenantId: r.tenant_id || undefined,
+        message: r.message || undefined,
+      }));
+
+      if (accounts.length === 0) {
         return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
       }
-      const payload = res.rows[0].payload || {};
-      const raw = payload.accounts && payload.accounts.length > 0 ? payload.accounts : DEFAULT_ACCOUNTS;
-      return {
-        accounts: raw,
-        pendingUsers: payload.pendingUsers || [],
-      };
+
+      return { accounts, pendingUsers };
     } catch (err) {
       console.error('[PostgresAdapter] Error in getAccounts, returning fallback:', err);
       return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
@@ -255,12 +367,59 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   async saveAccounts(state: { accounts: User[]; pendingUsers: PendingUser[] }): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO lrims_accounts (key_name, payload, updated_at)
-       VALUES ('global_accounts', $1, NOW())
-       ON CONFLICT (key_name) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-      [JSON.stringify(state)]
-    );
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Upsert active accounts
+      for (const a of state.accounts) {
+        await client.query(
+          `INSERT INTO lrims_accounts (id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at, account_type, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             name = EXCLUDED.name, username = EXCLUDED.username, password = EXCLUDED.password,
+             email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, status = EXCLUDED.status,
+             tenant_id = EXCLUDED.tenant_id, tenant_name = EXCLUDED.tenant_name, created_by = EXCLUDED.created_by,
+             created_at = EXCLUDED.created_at, account_type = 'active', updated_at = NOW()`,
+          [a.id, a.name, a.username, a.password || '', a.email || '', a.role, a.unit, a.status || 'Aktif', a.tenantId || null, a.tenantName || null, a.createdBy || null, a.createdAt || new Date().toISOString()]
+        );
+      }
+
+      // Upsert pending users
+      for (const p of state.pendingUsers) {
+        await client.query(
+          `INSERT INTO lrims_accounts (id, name, username, password, email, unit, requested_role, registered_at, tenant_id, message, account_type, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             name = EXCLUDED.name, username = EXCLUDED.username, password = EXCLUDED.password,
+             email = EXCLUDED.email, unit = EXCLUDED.unit, requested_role = EXCLUDED.requested_role,
+             registered_at = EXCLUDED.registered_at, tenant_id = EXCLUDED.tenant_id, message = EXCLUDED.message,
+             account_type = 'pending', updated_at = NOW()`,
+          [p.id, p.name, p.username, p.password, p.email || '', p.unit, p.requestedRole, p.registeredAt, p.tenantId || null, p.message || null]
+        );
+      }
+
+      // Remove stale rows that are no longer in the state
+      const activeIds = state.accounts.map(a => a.id);
+      const pendingIds = state.pendingUsers.map(p => p.id);
+      const allIds = [...activeIds, ...pendingIds];
+
+      if (allIds.length > 0) {
+        await client.query(
+          `DELETE FROM lrims_accounts WHERE id NOT IN (${allIds.map((_, i) => `$${i + 1}`).join(',')})`,
+          allIds
+        );
+      } else {
+        await client.query('DELETE FROM lrims_accounts');
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async getTenantData(tenantId: string): Promise<DBData> {
