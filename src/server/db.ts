@@ -853,6 +853,18 @@ let memoryAccountsState: AccountsState | null = null;
 let lastCloudSyncTime = 0;
 
 export async function syncCloudAccountsState(): Promise<AccountsState> {
+  if (activeAdapter) {
+    try {
+      const adapterState = await activeAdapter.getAccounts();
+      if (adapterState && Array.isArray(adapterState.accounts)) {
+        memoryAccountsState = adapterState;
+        return memoryAccountsState;
+      }
+    } catch (e) {
+      console.error('[Adapter Get Accounts Sync Warning]:', e);
+    }
+  }
+
   try {
     const res = await fetch(GLOBAL_ACCOUNTS_CLOUD_URL, {
       headers: { 'Accept': 'application/json' }
