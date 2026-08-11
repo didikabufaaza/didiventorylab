@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { IDatabaseAdapter, DBProviderType, DBStatusResponse } from './types.js';
 import { TenantInfo, User, PendingUser, DBData } from '../../types.js';
-import { seedTenantData, DEFAULT_ACCOUNTS, DEFAULT_TENANTS } from '../db.js';
+import { seedTenantData, DEFAULT_ACCOUNTS, DEFAULT_TENANTS, mergeAccountsWithDefaults } from '../db.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const TENANTS_DIR = path.join(DATA_DIR, 'tenants');
@@ -71,8 +71,9 @@ export class JsonAdapter implements IDatabaseAdapter {
       accounts: DEFAULT_ACCOUNTS,
       pendingUsers: [],
     });
+    const raw = state.accounts && state.accounts.length > 0 ? state.accounts : DEFAULT_ACCOUNTS;
     return {
-      accounts: state.accounts || DEFAULT_ACCOUNTS,
+      accounts: mergeAccountsWithDefaults(raw),
       pendingUsers: state.pendingUsers || [],
     };
   }

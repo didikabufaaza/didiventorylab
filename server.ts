@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'path';
-import { db, accountStore, tenantStore, initDatabase, getDbStatus } from './src/server/db.js';
+import { db, accountStore, tenantStore, initDatabase, getDbStatus, isValidPassword } from './src/server/db.js';
 import { PostgresAdapter } from './src/server/adapters/PostgresAdapter.js';
 import {
   InventoryTransaction,
@@ -229,11 +229,42 @@ app.use('/api', (req, res, next) => {
   app.post('/api/auth/login', (req, res) => {
     try {
       const { username, password } = req.body || {};
-      const user = accountStore.findByUsername(username || '');
-      if (!user || user.password !== password || user.status !== 'Aktif') {
-        res.status(401).json({ error: 'Username atau password salah, atau akun tidak aktif.' });
+      const trimmedUsername = (username || '').trim();
+
+      if (!trimmedUsername) {
+        res.status(400).json({ error: 'Username wajib diisi.' });
         return;
       }
+
+      const user = accountStore.findByUsername(trimmedUsername);
+      if (!user) {
+        // Cek jika username ada di pendingUsers
+        const pendingUser = accountStore.getPendingUsers().find(
+          (p) => (p.username || '').trim().toLowerCase() === trimmedUsername.toLowerCase()
+        );
+        if (pendingUser) {
+          res.status(401).json({
+            error: 'Akun Anda telah terdaftar tetapi masih menunggu persetujuan (approval) dari Super Admin. Silakan hubungi Super Admin.'
+          });
+          return;
+        }
+        res.status(401).json({ error: 'Username tidak terdaftar dalam sistem.' });
+        return;
+      }
+
+      // Verifikasi status akun
+      const statusStr = (user.status || 'Aktif').trim().toLowerCase();
+      if (statusStr === 'nonaktif') {
+        res.status(401).json({ error: 'Akun Anda dalam status Nonaktif. Silakan hubungi Super Admin.' });
+        return;
+      }
+
+      // Verifikasi password
+      if (!isValidPassword(user, password || '')) {
+        res.status(401).json({ error: 'Password yang Anda masukkan salah.' });
+        return;
+      }
+
       const tenant = tenantStore.find(user.tenantId || 'lab-sentral');
       const token = generateToken({ accountId: user.id });
       db.bind(user.tenantId || 'lab-sentral');

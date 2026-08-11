@@ -2,7 +2,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import { IDatabaseAdapter, DBProviderType, DBStatusResponse } from './types.js';
 import { TenantInfo, User, PendingUser, DBData } from '../../types.js';
-import { seedTenantData, DEFAULT_ACCOUNTS, DEFAULT_TENANTS } from '../db.js';
+import { seedTenantData, DEFAULT_ACCOUNTS, DEFAULT_TENANTS, mergeAccountsWithDefaults } from '../db.js';
 
 export class PostgresAdapter implements IDatabaseAdapter {
   public providerName: DBProviderType = 'postgres';
@@ -207,8 +207,9 @@ export class PostgresAdapter implements IDatabaseAdapter {
         return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
       }
       const payload = res.rows[0].payload || {};
+      const raw = payload.accounts && payload.accounts.length > 0 ? payload.accounts : DEFAULT_ACCOUNTS;
       return {
-        accounts: payload.accounts || DEFAULT_ACCOUNTS,
+        accounts: mergeAccountsWithDefaults(raw),
         pendingUsers: payload.pendingUsers || [],
       };
     } catch (err) {
