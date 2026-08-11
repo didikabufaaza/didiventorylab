@@ -569,7 +569,8 @@ app.use('/api', (req, res, next) => {
     res.json({ success: true });
   });
 
-  app.get('/api/users', (req, res) => {
+  app.get('/api/users', async (req, res) => {
+    await syncCloudAccountsState();
     const tenantName = new Map(tenantStore.getAll().map((t) => [t.id, t.name]));
     const users = accountStore
       .getAll()

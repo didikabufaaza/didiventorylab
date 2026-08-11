@@ -1441,8 +1441,8 @@ export const accountStore = {
     return getAccountsState().pendingUsers;
   },
   findById(id: string) {
-    // Only match by exact id — do NOT fallback to username to avoid accidental matches
-    return this.getAll().find((a) => a.id === id) || null;
+    const target = (id || '').trim().toLowerCase();
+    return this.getAll().find((a) => a.id === id || (a.username || '').trim().toLowerCase() === target) || null;
   },
   findByUsername(username: string) {
     const target = (username || '').trim().toLowerCase();
@@ -1463,7 +1463,8 @@ export const accountStore = {
   },
   async updateAsync(id: string, patch: Partial<User>): Promise<User | null> {
     const state = getAccountsState();
-    const idx = state.accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     state.accounts[idx] = { ...state.accounts[idx], ...patch };
     await saveAccountsStateWithAdapter(state);
@@ -1471,7 +1472,8 @@ export const accountStore = {
   },
   update(id: string, patch: Partial<User>) {
     const state = getAccountsState();
-    const idx = state.accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     state.accounts[idx] = { ...state.accounts[idx], ...patch };
     saveAccountsState(state);
@@ -1482,7 +1484,8 @@ export const accountStore = {
   },
   async removeAsync(id: string): Promise<User | null> {
     const state = getAccountsState();
-    const idx = state.accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = state.accounts.splice(idx, 1)[0];
     await saveAccountsStateWithAdapter(state);
@@ -1490,7 +1493,8 @@ export const accountStore = {
   },
   remove(id: string) {
     const state = getAccountsState();
-    const idx = state.accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = state.accounts.splice(idx, 1)[0];
     saveAccountsState(state);
@@ -1514,7 +1518,8 @@ export const accountStore = {
   },
   async removePendingAsync(id: string): Promise<PendingUser | null> {
     const state = getAccountsState();
-    const idx = state.pendingUsers.findIndex((p) => p.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.pendingUsers.findIndex((p) => p.id === id || (p.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = state.pendingUsers.splice(idx, 1)[0];
     await saveAccountsStateWithAdapter(state);
@@ -1522,7 +1527,8 @@ export const accountStore = {
   },
   removePending(id: string) {
     const state = getAccountsState();
-    const idx = state.pendingUsers.findIndex((p) => p.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.pendingUsers.findIndex((p) => p.id === id || (p.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = state.pendingUsers.splice(idx, 1)[0];
     saveAccountsState(state);
