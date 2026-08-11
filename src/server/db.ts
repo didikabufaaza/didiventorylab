@@ -1524,7 +1524,7 @@ export const accountStore = {
     return this.getAll().find((a) => (a.username || '').trim().toLowerCase() === target) || null;
   },
   async addAsync(account: User): Promise<void> {
-    const state = getAccountsState();
+    const state = await syncCloudAccountsState();
     state.accounts.push(account);
     await saveAccountsStateWithAdapter(state);
   },
@@ -1537,7 +1537,7 @@ export const accountStore = {
     }
   },
   async updateAsync(id: string, patch: Partial<User>): Promise<User | null> {
-    const state = getAccountsState();
+    const state = await syncCloudAccountsState();
     const target = (id || '').trim().toLowerCase();
     const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
@@ -1558,7 +1558,7 @@ export const accountStore = {
     return state.accounts[idx];
   },
   async removeAsync(id: string): Promise<User | null> {
-    const state = getAccountsState();
+    const state = await syncCloudAccountsState();
     const target = (id || '').trim().toLowerCase();
     const idx = state.accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
@@ -1579,7 +1579,7 @@ export const accountStore = {
     return removed;
   },
   async addPendingAsync(pending: PendingUser): Promise<void> {
-    const state = getAccountsState();
+    const state = await syncCloudAccountsState();
     state.pendingUsers.unshift(pending);
     await saveAccountsStateWithAdapter(state);
   },
@@ -1592,7 +1592,7 @@ export const accountStore = {
     }
   },
   async removePendingAsync(id: string): Promise<PendingUser | null> {
-    const state = getAccountsState();
+    const state = await syncCloudAccountsState();
     const target = (id || '').trim().toLowerCase();
     const idx = state.pendingUsers.findIndex((p) => p.id === id || (p.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;

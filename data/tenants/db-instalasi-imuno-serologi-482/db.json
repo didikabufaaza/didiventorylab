@@ -752,6 +752,17 @@
   ],
   "auditLogs": [
     {
+      "id": "audn-1786431122283",
+      "timestamp": "11/8/2026, 13.52.02",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "DELETE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786281667703",
+      "details": "Menghapus akun: Siti Rahma (@sitirahma) dari database Database Instalasi Imuno-Serologi"
+    },
+    {
       "id": "audn-1786281667714",
       "timestamp": "9/8/2026, 20.21.07",
       "userId": "usr-admin",

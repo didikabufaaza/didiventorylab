@@ -6749,6 +6749,83 @@
   "analyzers": [],
   "auditLogs": [
     {
+      "id": "audn-1786432540149",
+      "timestamp": "11/8/2026, 14.15.40",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "DELETE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786281264195",
+      "details": "Menghapus akun: Dr. Test (@drtest) dari database Unit Laboratorium Sentral"
+    },
+    {
+      "id": "audn-1786431335110",
+      "timestamp": "11/8/2026, 13.55.35",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "DELETE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786431246011",
+      "details": "Menghapus akun: Test Pending User (@testpending) dari database Unit Laboratorium Sentral"
+    },
+    {
+      "id": "audn-1786431283171",
+      "timestamp": "11/8/2026, 13.54.43",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "REGISTRASI_AKUN",
+      "module": "Manajemen User",
+      "targetId": "",
+      "details": "Permohonan pendaftaran akun baru oleh Test Reject User (@testreject) dari unit 'Unit Laboratorium Sentral' dengan permohonan peran 'Petugas Laboratorium'"
+    },
+    {
+      "id": "audn-1786431246051",
+      "timestamp": "11/8/2026, 13.54.06",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "APPROVE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786431246011",
+      "details": "Menyetujui pendaftaran akun baru: Test Pending User (@testpending) pada database Unit Laboratorium Sentral sebagai Petugas Laboratorium"
+    },
+    {
+      "id": "audn-1786431207606",
+      "timestamp": "11/8/2026, 13.53.27",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "REGISTRASI_AKUN",
+      "module": "Manajemen User",
+      "targetId": "",
+      "details": "Permohonan pendaftaran akun baru oleh Test Pending User (@testpending) dari unit 'Unit Laboratorium Sentral' dengan permohonan peran 'Petugas Laboratorium'"
+    },
+    {
+      "id": "audn-1786430391283",
+      "timestamp": "11/8/2026, 13.39.51",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "DELETE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786281264195",
+      "details": "Menghapus akun: Dr. Test Updated (@drtest) dari database Unit Laboratorium Sentral"
+    },
+    {
+      "id": "audn-1786430182763",
+      "timestamp": "11/8/2026, 13.36.22",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "UPDATE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786281264195",
+      "details": "Memperbarui akun: Dr. Test Updated (@drtest) pada database Unit Laboratorium Sentral"
+    },
+    {
       "id": "audn-1786281264205",
       "timestamp": "9/8/2026, 20.14.24",
       "userId": "usr-admin",

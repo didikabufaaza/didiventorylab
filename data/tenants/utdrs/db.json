@@ -860,6 +860,28 @@
   ],
   "auditLogs": [
     {
+      "id": "audn-1786432582166",
+      "timestamp": "11/8/2026, 14.16.22",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "UPDATE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-utdrs-01",
+      "details": "Memperbarui akun: Aditya Pratama Updated (@aditya) pada database Unit Transfusi Darah RSUD (UTDRS)"
+    },
+    {
+      "id": "audn-1786431164929",
+      "timestamp": "11/8/2026, 13.52.44",
+      "userId": "usr-admin",
+      "userName": "Super Admin",
+      "userRole": "Super Admin",
+      "action": "UPDATE_USER",
+      "module": "Manajemen User",
+      "targetId": "acc-1786424932806",
+      "details": "Memperbarui akun: Winardi updated (@winardi) pada database Unit Transfusi Darah RSUD (UTDRS)"
+    },
+    {
       "id": "aud-1786262708531",
       "timestamp": "9/8/2026, 15.05.08",
       "userId": "usr-1",

@@ -4,16 +4,16 @@
       "id": "lab-sentral",
       "name": "Unit Laboratorium Sentral",
       "unit": "Laboratorium Sentral",
-      "status": "Aktif",
       "description": "Database utama Instalasi Laboratorium RSUD",
+      "status": "Aktif",
       "createdAt": "2026-08-09T07:07:03.963Z"
     },
     {
       "id": "utdrs",
       "name": "Unit Transfusi Darah RSUD (UTDRS)",
       "unit": "UTDRS",
-      "status": "Aktif",
       "description": "Database Unit Transfusi Darah Rumah Sakit",
+      "status": "Aktif",
       "createdAt": "2026-08-09T07:07:03.963Z"
     },
     {
