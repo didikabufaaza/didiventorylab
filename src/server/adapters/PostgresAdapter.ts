@@ -153,6 +153,42 @@ export class PostgresAdapter implements IDatabaseAdapter {
           [JSON.stringify({ accounts: DEFAULT_ACCOUNTS, pendingUsers: [] })]
         );
       }
+
+      // Seed Initial Tenant Data (Master Reagents, Batches, POs, etc.) if empty
+      const dataCheck = await client.query('SELECT COUNT(*) FROM lrims_tenant_data');
+      if (parseInt(dataCheck.rows[0].count, 10) === 0) {
+        const initialTenantData = seedTenantData();
+        for (const t of DEFAULT_TENANTS) {
+          await client.query(
+            `INSERT INTO lrims_tenant_data (tenant_id, payload, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (tenant_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+            [t.id, JSON.stringify(initialTenantData)]
+          );
+        }
+      }
+
+      // Sync Master Reagents relational table if empty
+      const reagentCheck = await client.query('SELECT COUNT(*) FROM lrims_reagents');
+      if (parseInt(reagentCheck.rows[0].count, 10) === 0) {
+        const tenantsRes = await client.query('SELECT tenant_id, payload FROM lrims_tenant_data');
+        for (const row of tenantsRes.rows) {
+          const tenantId = row.tenant_id;
+          const payload = row.payload as DBData;
+          if (payload && Array.isArray(payload.reagents)) {
+            for (const r of payload.reagents) {
+              await client.query(
+                `INSERT INTO lrims_reagents (id, tenant_id, code, name, brand, category, unit, min_stock, purchase_price, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                 ON CONFLICT (id) DO UPDATE SET
+                   name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category,
+                   unit = EXCLUDED.unit, min_stock = EXCLUDED.min_stock, purchase_price = EXCLUDED.purchase_price, updated_at = NOW()`,
+                [r.id, tenantId, r.code, r.name, r.brand, r.category, r.unit, r.minimumStock || 0, r.price || 0]
+              );
+            }
+          }
+        }
+      }
     } finally {
       client.release();
     }
