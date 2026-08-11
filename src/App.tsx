@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { AlertTriangle, BellRing } from 'lucide-react';
 import {
   UserRole,
   User,
+  PendingUser,
   DBData,
   Reagent,
   ReagentBatch,
@@ -48,6 +49,7 @@ import {
   markNotificationsReadApi,
   fetchAccountsApi,
   switchAccountApi,
+  getPendingUsersApi,
 } from './lib/api.js';
 
 import { LoginPage } from './components/Auth/LoginPage.js';
@@ -89,6 +91,8 @@ export default function App() {
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
   const [impersonatedBy, setImpersonatedBy] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<User[]>([]);
+  const [latestNewUserAlert, setLatestNewUserAlert] = useState<PendingUser | null>(null);
+  const prevPendingCountRef = useRef<number>(0);
 
   // Pemulihan sesi dari sessionStorage (tanpa flash login saat reload)
   useEffect(() => {
@@ -327,6 +331,35 @@ export default function App() {
       });
     };
   }, [isAuthenticated, handleLogout]);
+
+  // Real-Time Polling Pendaftaran Akun Baru (Super Admin)
+  useEffect(() => {
+    if (!isAuthenticated || currentRole !== 'Super Admin') return;
+
+    const checkPendingRealtime = async () => {
+      try {
+        const pending = await getPendingUsersApi();
+        const count = pending.length;
+        setPendingUsersCount(count);
+
+        if (count > prevPendingCountRef.current && prevPendingCountRef.current > 0) {
+          // Ada pendaftaran akun baru secara real-time!
+          const latest = pending[0];
+          if (latest) {
+            setLatestNewUserAlert(latest);
+          }
+        }
+        prevPendingCountRef.current = count;
+      } catch {
+        /* silent catch */
+      }
+    };
+
+    checkPendingRealtime();
+    const interval = setInterval(checkPendingRealtime, 4000); // Polling real-time setiap 4 detik
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, currentRole]);
 
   useEffect(() => {
     loadData();
@@ -952,6 +985,52 @@ export default function App() {
               >
                 {confirmModalConfig.confirmText}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Real-Time Alert untuk Permohonan Pendaftaran Akun Baru (Super Admin) */}
+      {latestNewUserAlert && (
+        <div className="fixed top-4 right-4 z-50 max-w-md w-full animate-bounce">
+          <div className="bg-slate-950 border-2 border-rose-500 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-start space-x-3.5 ring-4 ring-rose-500/30">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white font-bold text-lg animate-pulse shadow-md">
+              <BellRing className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <h4 className="font-extrabold text-sm text-white flex items-center space-x-1.5">
+                  <span>Permohonan Akun Baru!</span>
+                  <span className="rounded-md bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-300 font-bold">REAL-TIME</span>
+                </h4>
+                <button
+                  onClick={() => setLatestNewUserAlert(null)}
+                  className="text-slate-400 hover:text-white p-1 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 font-medium leading-relaxed">
+                <strong className="text-white font-bold">{latestNewUserAlert.name}</strong> (@{latestNewUserAlert.username}) dari unit <span className="underline font-bold text-rose-300">{latestNewUserAlert.unit || 'Umum'}</span> baru saja mendaftar.
+              </p>
+              <div className="mt-3 flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    setActiveTab('user-management');
+                    setLatestNewUserAlert(null);
+                  }}
+                  className="rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 px-3.5 py-2 text-xs font-extrabold text-white hover:from-rose-500 hover:to-rose-600 shadow-md transition-all flex items-center space-x-1.5"
+                >
+                  <span>Proses & Setujui Sekarang</span>
+                  <span>→</span>
+                </button>
+                <button
+                  onClick={() => setLatestNewUserAlert(null)}
+                  className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-all"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>

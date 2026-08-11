@@ -136,7 +136,11 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
     }
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    loadAll();
+    const interval = setInterval(loadAll, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const tenantNameById = (id?: string) => tenants.find((t) => t.id === id)?.name || '-';
 

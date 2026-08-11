@@ -338,6 +338,11 @@ app.use('/api', (req, res, next) => {
       tenantId: tenantMatch?.id,
     };
     accountStore.addPending(newPending);
+    const targetTenant = tenantMatch?.id || 'lab-sentral';
+    pushAudit(targetTenant, {
+      action: 'REGISTRASI_AKUN',
+      details: `Permohonan pendaftaran akun baru oleh ${name} (@${username}) dari unit '${unit || 'Laboratorium'}' dengan permohonan peran '${requestedRole || 'Petugas Laboratorium'}'`
+    });
     res.status(201).json({ message: 'Pendaftaran berhasil. Menunggu persetujuan Super Admin.' });
   });
 
