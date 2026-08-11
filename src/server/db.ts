@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import {
   Reagent,
   ReagentBatch,
@@ -779,10 +780,24 @@ function ensureDataDir() {
   }
 }
 
+const TMP_DATA_DIR = path.join(os.tmpdir(), 'lrims_data');
+
+function resolveWritableFile(file: string): string {
+  const rel = path.relative(DATA_DIR, file);
+  if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+    const tmpFile = path.join(TMP_DATA_DIR, rel);
+    if (fs.existsSync(tmpFile)) {
+      return tmpFile;
+    }
+  }
+  return file;
+}
+
 function readJsonFile<T>(file: string, fallback: T): T {
   try {
-    if (fs.existsSync(file)) {
-      return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+    const target = resolveWritableFile(file);
+    if (fs.existsSync(target)) {
+      return JSON.parse(fs.readFileSync(target, 'utf-8')) as T;
     }
   } catch (err) {
     console.error(`Error reading ${file}, falling back to defaults:`, err);
@@ -791,11 +806,22 @@ function readJsonFile<T>(file: string, fallback: T): T {
 }
 
 function writeJsonFile(file: string, value: unknown) {
+  const content = JSON.stringify(value, null, 2);
   try {
     ensureDataDir();
-    fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf-8');
+    fs.writeFileSync(file, content, 'utf-8');
   } catch (err) {
-    // Catch read-only filesystem on Vercel
+    try {
+      const rel = path.relative(DATA_DIR, file);
+      if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+        const tmpFile = path.join(TMP_DATA_DIR, rel);
+        const tmpDir = path.dirname(tmpFile);
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        fs.writeFileSync(tmpFile, content, 'utf-8');
+      }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -821,15 +847,22 @@ function tenantExists(id: string): boolean {
 }
 
 // --- Registry Akun Global ---
+let memoryAccountsState: AccountsState | null = null;
+
 function getAccountsState(): AccountsState {
+  if (memoryAccountsState) {
+    return memoryAccountsState;
+  }
   const fallback: AccountsState = { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
   const res = readJsonFile<AccountsState>(ACCOUNTS_FILE, fallback);
   const rawAccounts = res && Array.isArray(res.accounts) && res.accounts.length > 0 ? res.accounts : DEFAULT_ACCOUNTS;
   const mergedAccounts = mergeAccountsWithDefaults(rawAccounts);
   const pendingUsers = res && Array.isArray(res.pendingUsers) ? res.pendingUsers : [];
-  return { accounts: mergedAccounts, pendingUsers };
+  memoryAccountsState = { accounts: mergedAccounts, pendingUsers };
+  return memoryAccountsState;
 }
 function saveAccountsState(state: AccountsState) {
+  memoryAccountsState = state;
   writeJsonFile(ACCOUNTS_FILE, state);
 }
 

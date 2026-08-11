@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { IDatabaseAdapter, DBProviderType, DBStatusResponse } from './types.js';
 import { TenantInfo, User, PendingUser, DBData } from '../../types.js';
 import { seedTenantData, DEFAULT_ACCOUNTS, DEFAULT_TENANTS, mergeAccountsWithDefaults } from '../db.js';
@@ -8,6 +9,7 @@ const DATA_DIR = path.resolve(process.cwd(), 'data');
 const TENANTS_DIR = path.join(DATA_DIR, 'tenants');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const TENANTS_FILE = path.join(DATA_DIR, 'tenants.json');
+const TMP_DATA_DIR = path.join(os.tmpdir(), 'lrims_data');
 
 function ensureDir(dir: string) {
   try {
@@ -17,10 +19,22 @@ function ensureDir(dir: string) {
   }
 }
 
+function resolveWritableFile(filePath: string): string {
+  const rel = path.relative(DATA_DIR, filePath);
+  if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+    const tmpFile = path.join(TMP_DATA_DIR, rel);
+    if (fs.existsSync(tmpFile)) {
+      return tmpFile;
+    }
+  }
+  return filePath;
+}
+
 function readJson<T>(filePath: string, fallback: T): T {
   try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const target = resolveWritableFile(filePath);
+    if (fs.existsSync(target)) {
+      return JSON.parse(fs.readFileSync(target, 'utf-8'));
     }
   } catch (err) {
     console.error(`Error reading JSON file ${filePath}:`, err);
@@ -29,12 +43,23 @@ function readJson<T>(filePath: string, fallback: T): T {
 }
 
 function writeJson<T>(filePath: string, data: T) {
+  const content = JSON.stringify(data, null, 2);
   try {
     const dir = path.dirname(filePath);
     ensureDir(dir);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(filePath, content, 'utf-8');
   } catch (err) {
-    // Read-only filesystem catch
+    try {
+      const rel = path.relative(DATA_DIR, filePath);
+      if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+        const tmpFile = path.join(TMP_DATA_DIR, rel);
+        const tmpDir = path.dirname(tmpFile);
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        fs.writeFileSync(tmpFile, content, 'utf-8');
+      }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
