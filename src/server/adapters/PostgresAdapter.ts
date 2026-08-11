@@ -245,7 +245,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
       const payload = res.rows[0].payload || {};
       const raw = payload.accounts && payload.accounts.length > 0 ? payload.accounts : DEFAULT_ACCOUNTS;
       return {
-        accounts: mergeAccountsWithDefaults(raw),
+        accounts: raw,
         pendingUsers: payload.pendingUsers || [],
       };
     } catch (err) {

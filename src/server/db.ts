@@ -857,31 +857,15 @@ export async function syncCloudAccountsState(): Promise<AccountsState> {
     try {
       const adapterState = await activeAdapter.getAccounts();
       if (adapterState && Array.isArray(adapterState.accounts)) {
+        // Adapter is source of truth — just load it directly (no merge with local to avoid resurrecting deleted users)
         memoryAccountsState = adapterState;
+        writeJsonFile(ACCOUNTS_FILE, memoryAccountsState);
+        lastCloudSyncTime = Date.now();
         return memoryAccountsState;
       }
     } catch (e) {
       console.error('[Adapter Get Accounts Sync Warning]:', e);
     }
-  }
-
-  try {
-    const res = await fetch(GLOBAL_ACCOUNTS_CLOUD_URL, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && (Array.isArray(data.accounts) || Array.isArray(data.pendingUsers))) {
-        const mergedAccounts = mergeAccountsWithDefaults(data.accounts || []);
-        const pendingUsers = Array.isArray(data.pendingUsers) ? data.pendingUsers : [];
-        memoryAccountsState = { accounts: mergedAccounts, pendingUsers };
-        writeJsonFile(ACCOUNTS_FILE, memoryAccountsState);
-        lastCloudSyncTime = Date.now();
-        return memoryAccountsState;
-      }
-    }
-  } catch {
-    /* silent catch */
   }
   return getAccountsState();
 }
@@ -1119,18 +1103,6 @@ export const DEFAULT_ACCOUNTS: User[] = [
     createdAt: '2026-08-09T07:15:38.898Z',
   },
   {
-    id: 'acc-1786281264195',
-    name: 'Dr. Test',
-    username: 'drtest',
-    email: 'drtest@lab.id',
-    role: 'Petugas Laboratorium',
-    unit: 'Unit Laboratorium Sentral',
-    status: 'Aktif',
-    password: 'password123',
-    tenantId: 'lab-sentral',
-    createdAt: '2026-08-09T13:14:24.195Z',
-  },
-  {
     id: 'acc-1786281667703',
     name: 'Siti Rahma',
     username: 'sitirahma',
@@ -1158,6 +1130,47 @@ export function mergeAccountsWithDefaults(accounts: User[]): User[] {
     }
   }
   return Array.from(map.values());
+}
+
+// Merge two account states by username: keeps ALL unique accounts from both sources.
+// Prefers the version with a non-empty password or more complete data.
+export function mergeTwoAccountStates(local: AccountsState, remote: AccountsState): AccountsState {
+  const accountMap = new Map<string, User>();
+  for (const acc of remote.accounts || []) {
+    if (acc?.username) accountMap.set(acc.username.trim().toLowerCase(), acc);
+  }
+  for (const acc of local.accounts || []) {
+    if (!acc?.username) continue;
+    const key = acc.username.trim().toLowerCase();
+    const existing = accountMap.get(key);
+    if (!existing) {
+      accountMap.set(key, acc);
+    } else {
+      // Keep the one with a password set, or the more recent one
+      const existingHasPwd = !!(existing.password || '').trim();
+      const localHasPwd = !!(acc.password || '').trim();
+      if (localHasPwd && !existingHasPwd) {
+        accountMap.set(key, acc);
+      } else if (existingHasPwd === localHasPwd) {
+        // Same password status — prefer local (more up-to-date)
+        accountMap.set(key, acc);
+      }
+    }
+  }
+
+  // Merge pending users by id
+  const pendingMap = new Map<string, PendingUser>();
+  for (const p of local.pendingUsers || []) {
+    if (p?.id) pendingMap.set(p.id, p);
+  }
+  for (const p of remote.pendingUsers || []) {
+    if (p?.id && !pendingMap.has(p.id)) pendingMap.set(p.id, p);
+  }
+
+  return {
+    accounts: Array.from(accountMap.values()),
+    pendingUsers: Array.from(pendingMap.values()),
+  };
 }
 
 export function isValidPassword(user: { username: string; password?: string }, passwordAttempt: string): boolean {
@@ -1361,8 +1374,63 @@ export async function initDatabase(): Promise<IDatabaseAdapter> {
     try {
       const tenants = await activeAdapter.getTenants();
       saveTenantsState(tenants);
-      const accountsState = await activeAdapter.getAccounts();
-      saveAccountsState(accountsState);
+      // Adapter is source of truth for accounts
+      const adapterAccounts = await activeAdapter.getAccounts();
+      if (adapterAccounts && Array.isArray(adapterAccounts.accounts) && adapterAccounts.accounts.length > 0) {
+        memoryAccountsState = adapterAccounts;
+        saveAccountsState(adapterAccounts);
+        console.log(`[DB Init] Accounts loaded from adapter: ${adapterAccounts.accounts.length} active, ${adapterAccounts.pendingUsers.length} pending`);
+      } else {
+        // Adapter empty → push local to adapter
+        const localAccounts = getAccountsState();
+        await activeAdapter.saveAccounts(localAccounts);
+        console.log(`[DB Init] Pushed local accounts to adapter: ${localAccounts.accounts.length} active`);
+      }
+
+      // Smart sync: reconcile local file data vs adapter data per tenant.
+      // If local has MORE data (e.g. 252 reagents) → push to adapter (auto-migrate).
+      // If adapter has data but local file is missing/stale → pull from adapter.
+      // This ensures both sources converge to the richest dataset.
+      for (const t of tenants) {
+        try {
+          const adapterData = await activeAdapter.getTenantData(t.id);
+          const localFile = getTenantFile(t.id);
+          let localData: DBData | null = null;
+
+          try {
+            if (fs.existsSync(localFile)) {
+              const raw = JSON.parse(fs.readFileSync(localFile, 'utf-8'));
+              if (raw && Array.isArray(raw.reagents)) {
+                localData = raw;
+              }
+            }
+          } catch { /* ignore parse errors */ }
+
+          const adapterCount = adapterData?.reagents?.length || 0;
+          const localCount = localData?.reagents?.length || 0;
+
+          if (localCount > adapterCount) {
+            // Local is richer → push to adapter so InsForge matches app
+            if (localData) {
+              console.log(`[DB Init] Auto-sync UP tenant "${t.id}": local ${localCount} reagents → adapter (adapter had ${adapterCount})`);
+              await activeAdapter.saveTenantData(t.id, localData);
+            }
+          } else if (adapterCount > 0 && (!localData || localCount < adapterCount)) {
+            // Adapter is richer → pull to local file
+            console.log(`[DB Init] Auto-sync DOWN tenant "${t.id}": adapter ${adapterCount} reagents → local file (local had ${localCount})`);
+            ensureDataDir();
+            const dir = getTenantDir(t.id);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            writeJsonFile(getTenantFile(t.id), adapterData);
+          } else if (adapterCount === 0 && localCount === 0 && localData) {
+            // Both empty but file exists → push seed to adapter
+            console.log(`[DB Init] Seed push tenant "${t.id}" to adapter`);
+            await activeAdapter.saveTenantData(t.id, localData);
+          }
+        } catch (err) {
+          console.error(`[DB Init] Error syncing tenant ${t.id}:`, err);
+        }
+      }
     } catch (err) {
       console.error('[DB Init] Warning loading initial adapter data:', err);
     }

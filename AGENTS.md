@@ -12,7 +12,8 @@ Sistem Manajemen Persediaan Reagen Laboratorium (SI-REAGEN) adalah aplikasi Full
 ### Tech Stack:
 - **Frontend**: React 18 (TypeScript), Vite, Tailwind CSS, Lucide React Icons.
 - **Backend**: Node.js dengan Express.js (`server.ts`) melayani API server-side sekaligus Vite middleware.
-- **Data Persistence**: Engine JSON file-backed terintegrasi (`data/db.json`) yang berada di `src/server/db.ts` dengan dukungan data seed otomatis.
+- **Data Persistence**: Multi-tenant hybrid — local JSON files (`data/tenants/<tenantId>/db.json`) + InsForge PostgreSQL cloud sync.
+- **Database Adapter**: `PostgresAdapter` (InsForge/Neon/Supabase) atau `JsonAdapter` (local fallback). Dipilih otomatis berdasarkan `DATABASE_URL` di `.env`.
 - **Port Requirement**: Bekerja secara penuh pada Port `3000` (`0.0.0.0`).
 
 ---
@@ -37,7 +38,10 @@ Sistem Manajemen Persediaan Reagen Laboratorium (SI-REAGEN) adalah aplikasi Full
 │       ├── StockOpname/                  # Modul Opname & Penyesuaian Stok
 │       └── Reports/                      # Laporan & Audit Logs
 ├── data/
-│   └── db.json                           # Persistent Local Storage File
+│   ├── accounts.json                     # Global account storage (13 akun)
+│   ├── tenants.json                      # Tenant registry (8 tenants)
+│   ├── tenants/<tenantId>/db.json        # Per-tenant operational data
+│   └── lrims_db.json                     # Legacy single-file database (migrated)
 ├── package.json                          # Scripts: dev, build, start
 └── AGENTS.md                             # Dokumentasi & AI Handover Instructions
 ```

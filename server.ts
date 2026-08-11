@@ -302,50 +302,55 @@ app.use('/api', (req, res, next) => {
   }
 
   app.post('/api/auth/register', async (req, res) => {
-    await syncCloudAccountsState();
-    const { username, name, email, unit, password: pwd, requestedRole } = req.body;
-    if (
-      accountStore.findByUsername(username) ||
-      accountStore.getPendingUsers().some((p) => p.username === username)
-    ) {
-      res.status(409).json({ error: 'Username sudah digunakan.' });
-      return;
-    }
-    // Sinkronkan unit & buat tenant baru jika unit belum memiliki tenant
-    if (unit && unit.trim()) {
-      let tenantMatch = tenantStore
-        .getAll()
-        .find((t) => (t.unit || '').toLowerCase() === unit.toLowerCase() || (t.name || '').toLowerCase() === unit.toLowerCase());
-      if (!tenantMatch) {
-        tenantMatch = tenantStore.create({
-          name: unit.startsWith('Database') ? unit : `Database ${unit}`,
-          unit: unit,
-          description: `Database otomatis untuk unit ${unit}`,
-        }) || undefined;
+    try {
+      await syncCloudAccountsState();
+      const { username, name, email, unit, password: pwd, requestedRole } = req.body;
+      if (
+        accountStore.findByUsername(username) ||
+        accountStore.getPendingUsers().some((p) => p.username === username)
+      ) {
+        res.status(409).json({ error: 'Username sudah digunakan.' });
+        return;
       }
-    }
-    syncTenantUnits();
-    const tenants = tenantStore.getAll();
-    const tenantMatch = tenants.find((t) => (t.unit || '').toLowerCase() === (unit || '').toLowerCase());
+      // Sinkronkan unit & buat tenant baru jika unit belum memiliki tenant
+      if (unit && unit.trim()) {
+        let tenantMatch = tenantStore
+          .getAll()
+          .find((t) => (t.unit || '').toLowerCase() === unit.toLowerCase() || (t.name || '').toLowerCase() === unit.toLowerCase());
+        if (!tenantMatch) {
+          tenantMatch = tenantStore.create({
+            name: unit.startsWith('Database') ? unit : `Database ${unit}`,
+            unit: unit,
+            description: `Database otomatis untuk unit ${unit}`,
+          }) || undefined;
+        }
+      }
+      syncTenantUnits();
+      const tenants = tenantStore.getAll();
+      const tenantMatch = tenants.find((t) => (t.unit || '').toLowerCase() === (unit || '').toLowerCase());
 
-    const newPending: PendingUser = {
-      id: `pnd-${Date.now()}`,
-      name,
-      username,
-      email,
-      unit,
-      password: pwd,
-      requestedRole: requestedRole || 'Petugas Laboratorium',
-      registeredAt: new Date().toISOString(),
-      tenantId: tenantMatch?.id,
-    };
-    await accountStore.addPendingAsync(newPending);
-    const targetTenant = tenantMatch?.id || 'lab-sentral';
-    pushAudit(targetTenant, {
-      action: 'REGISTRASI_AKUN',
-      details: `Permohonan pendaftaran akun baru oleh ${name} (@${username}) dari unit '${unit || 'Laboratorium'}' dengan permohonan peran '${requestedRole || 'Petugas Laboratorium'}'`
-    });
-    res.status(201).json({ message: 'Pendaftaran berhasil. Menunggu persetujuan Super Admin.' });
+      const newPending: PendingUser = {
+        id: `pnd-${Date.now()}`,
+        name,
+        username,
+        email,
+        unit,
+        password: pwd,
+        requestedRole: requestedRole || 'Petugas Laboratorium',
+        registeredAt: new Date().toISOString(),
+        tenantId: tenantMatch?.id,
+      };
+      await accountStore.addPendingAsync(newPending);
+      const targetTenant = tenantMatch?.id || 'lab-sentral';
+      pushAudit(targetTenant, {
+        action: 'REGISTRASI_AKUN',
+        details: `Permohonan pendaftaran akun baru oleh ${name} (@${username}) dari unit '${unit || 'Laboratorium'}' dengan permohonan peran '${requestedRole || 'Petugas Laboratorium'}'`
+      });
+      res.status(201).json({ message: 'Pendaftaran berhasil. Menunggu persetujuan Super Admin.' });
+    } catch (err: any) {
+      console.error('[POST /api/auth/register Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal melakukan pendaftaran.' });
+    }
   });
 
   app.post('/api/auth/reset-password', (req, res) => {
@@ -523,114 +528,142 @@ app.use('/api', (req, res, next) => {
   });
 
   app.get('/api/pending-users', async (req, res) => {
-    await syncCloudAccountsState();
-    res.json(accountStore.getPendingUsers());
+    try {
+      await syncCloudAccountsState();
+      res.json(accountStore.getPendingUsers());
+    } catch (err: any) {
+      console.error('[GET /api/pending-users Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal mengambil data pending user.' });
+    }
   });
 
   app.post('/api/pending-users/:id/approve', async (req, res) => {
-    await syncCloudAccountsState();
-    const pending = await accountStore.removePendingAsync(req.params.id);
-    if (!pending) { res.status(404).json({ error: 'Pending user not found' }); return; }
-    const tenantId = req.body.tenantId || pending.tenantId || 'lab-sentral';
-    const tenant = tenantStore.find(tenantId);
-    const role = req.body.role || pending.requestedRole;
-    const newUser: User = {
-      id: `acc-${Date.now()}`,
-      name: pending.name,
-      username: pending.username,
-      password: pending.password,
-      email: pending.email,
-      role,
-      unit: tenant?.name || pending.unit,
-      tenantId,
-      status: 'Aktif',
-      createdAt: new Date().toISOString(),
-    };
-    await accountStore.addAsync(newUser);
-    pushAudit(tenantId, {
-      action: 'APPROVE_USER',
-      targetId: newUser.id,
-      details: `Menyetujui pendaftaran akun baru: ${newUser.name} (@${newUser.username}) pada database ${tenant?.name || tenantId} sebagai ${role}`,
-    });
-    const { password: _pw, ...safeUser } = newUser;
-    res.json({ ...safeUser, tenantName: tenant?.name || '' });
+    try {
+      await syncCloudAccountsState();
+      const pending = await accountStore.removePendingAsync(req.params.id);
+      if (!pending) { res.status(404).json({ error: 'Pending user not found' }); return; }
+      const tenantId = req.body.tenantId || pending.tenantId || 'lab-sentral';
+      const tenant = tenantStore.find(tenantId);
+      const role = req.body.role || pending.requestedRole;
+      const newUser: User = {
+        id: `acc-${Date.now()}`,
+        name: pending.name,
+        username: pending.username,
+        password: pending.password,
+        email: pending.email,
+        role,
+        unit: tenant?.name || pending.unit,
+        tenantId,
+        status: 'Aktif',
+        createdAt: new Date().toISOString(),
+      };
+      await accountStore.addAsync(newUser);
+      pushAudit(tenantId, {
+        action: 'APPROVE_USER',
+        targetId: newUser.id,
+        details: `Menyetujui pendaftaran akun baru: ${newUser.name} (@${newUser.username}) pada database ${tenant?.name || tenantId} sebagai ${role}`,
+      });
+      const { password: _pw, ...safeUser } = newUser;
+      res.json({ ...safeUser, tenantName: tenant?.name || '' });
+    } catch (err: any) {
+      console.error('[POST /api/pending-users/:id/approve Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal menyetujui pendaftaran.' });
+    }
   });
 
   app.post('/api/pending-users/:id/reject', async (req, res) => {
-    await syncCloudAccountsState();
-    const removed = await accountStore.removePendingAsync(req.params.id);
-    if (!removed) { res.status(404).json({ error: 'Pending user not found' }); return; }
-    if (removed.tenantId) {
-      pushAudit(removed.tenantId, {
-        action: 'REJECT_USER',
-        details: `Menolak pendaftaran akun: ${removed.name} (@${removed.username})`,
-      });
+    try {
+      await syncCloudAccountsState();
+      const removed = await accountStore.removePendingAsync(req.params.id);
+      if (!removed) { res.status(404).json({ error: 'Pending user not found' }); return; }
+      if (removed.tenantId) {
+        pushAudit(removed.tenantId, {
+          action: 'REJECT_USER',
+          details: `Menolak pendaftaran akun: ${removed.name} (@${removed.username})`,
+        });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[POST /api/pending-users/:id/reject Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal menolak pendaftaran.' });
     }
-    res.json({ success: true });
   });
 
   app.get('/api/users', async (req, res) => {
-    await syncCloudAccountsState();
-    const tenantName = new Map(tenantStore.getAll().map((t) => [t.id, t.name]));
-    const users = accountStore
-      .getAll()
-      .map(({ password: _pw, ...u }) => ({ ...u, tenantName: tenantName.get(u.tenantId || '') || '' }));
-    res.json(users);
+    try {
+      await syncCloudAccountsState();
+      const tenantName = new Map(tenantStore.getAll().map((t) => [t.id, t.name]));
+      const users = accountStore
+        .getAll()
+        .map(({ password: _pw, ...u }) => ({ ...u, tenantName: tenantName.get(u.tenantId || '') || '' }));
+      res.json(users);
+    } catch (err: any) {
+      console.error('[GET /api/users Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal mengambil data user.' });
+    }
   });
 
   app.put('/api/users/:id', async (req, res) => {
-    await syncCloudAccountsState();
-    const current = accountStore.findById(req.params.id);
-    if (!current) { res.status(404).json({ error: 'User not found' }); return; }
+    try {
+      const current = accountStore.findById(req.params.id);
+      if (!current) { res.status(404).json({ error: 'User not found' }); return; }
 
-    const { name, username, email, unit, role, status, password, tenantId } = req.body;
+      const { name, username, email, unit, role, status, password, tenantId } = req.body;
 
-    // Validasi keunikan username jika diubah
-    if (username && username !== current.username) {
-      const dupe = [...accountStore.getAll(), ...accountStore.getPendingUsers()].some(
-        (a) => a.username === username
-      );
-      if (dupe) {
-        res.status(409).json({ error: 'Username sudah digunakan oleh akun lain.' });
-        return;
+      // Validasi keunikan username jika diubah
+      if (username && username !== current.username) {
+        const dupe = [...accountStore.getAll(), ...accountStore.getPendingUsers()].some(
+          (a) => a.username === username
+        );
+        if (dupe) {
+          res.status(409).json({ error: 'Username sudah digunakan oleh akun lain.' });
+          return;
+        }
       }
+
+      const updated = await accountStore.updateAsync(req.params.id, {
+        ...(name !== undefined ? { name } : {}),
+        ...(username !== undefined ? { username } : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(unit !== undefined ? { unit } : {}),
+        ...(role !== undefined ? { role } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(tenantId !== undefined ? { tenantId } : {}),
+        ...(password && password.trim() !== '' ? { password } : {}),
+      });
+      if (!updated) { res.status(404).json({ error: 'User not found' }); return; }
+
+      const tenant = tenantStore.find(updated.tenantId || 'lab-sentral');
+      pushAudit(updated.tenantId || 'lab-sentral', {
+        action: 'UPDATE_USER',
+        targetId: updated.id,
+        details: `Memperbarui akun: ${updated.name} (@${updated.username}) pada database ${tenant?.name || 'lab-sentral'}`,
+      });
+
+      const { password: _pw, ...safeUser } = updated;
+      res.json({ ...safeUser, tenantName: tenant?.name || '' });
+    } catch (err: any) {
+      console.error('[PUT /api/users/:id Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal memperbarui user.' });
     }
-
-    const updated = await accountStore.updateAsync(req.params.id, {
-      ...(name !== undefined ? { name } : {}),
-      ...(username !== undefined ? { username } : {}),
-      ...(email !== undefined ? { email } : {}),
-      ...(unit !== undefined ? { unit } : {}),
-      ...(role !== undefined ? { role } : {}),
-      ...(status !== undefined ? { status } : {}),
-      ...(tenantId !== undefined ? { tenantId } : {}),
-      ...(password && password.trim() !== '' ? { password } : {}),
-    });
-    if (!updated) { res.status(404).json({ error: 'User not found' }); return; }
-
-    const tenant = tenantStore.find(updated.tenantId || 'lab-sentral');
-    pushAudit(updated.tenantId || 'lab-sentral', {
-      action: 'UPDATE_USER',
-      targetId: updated.id,
-      details: `Memperbarui akun: ${updated.name} (@${updated.username}) pada database ${tenant?.name || 'lab-sentral'}`,
-    });
-
-    const { password: _pw, ...safeUser } = updated;
-    res.json({ ...safeUser, tenantName: tenant?.name || '' });
   });
 
   app.delete('/api/users/:id', async (req, res) => {
-    await syncCloudAccountsState();
-    const deletedUser = await accountStore.removeAsync(req.params.id);
-    if (!deletedUser) { res.status(404).json({ error: 'User not found' }); return; }
+    try {
+      const deletedUser = await accountStore.removeAsync(req.params.id);
+      if (!deletedUser) { res.status(404).json({ error: 'User not found' }); return; }
 
-    const tenant = tenantStore.find(deletedUser.tenantId || 'lab-sentral');
-    pushAudit(deletedUser.tenantId || 'lab-sentral', {
-      action: 'DELETE_USER',
-      targetId: deletedUser.id,
-      details: `Menghapus akun: ${deletedUser.name} (@${deletedUser.username}) dari database ${tenant?.name || 'lab-sentral'}`,
-    });
-    res.json({ success: true });
+      const tenant = tenantStore.find(deletedUser.tenantId || 'lab-sentral');
+      pushAudit(deletedUser.tenantId || 'lab-sentral', {
+        action: 'DELETE_USER',
+        targetId: deletedUser.id,
+        details: `Menghapus akun: ${deletedUser.name} (@${deletedUser.username}) dari database ${tenant?.name || 'lab-sentral'}`,
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[DELETE /api/users/:id Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal menghapus user.' });
+    }
   });
 
   // 1. REAGENTS CRUD
