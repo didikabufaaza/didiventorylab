@@ -1434,7 +1434,8 @@ export const accountStore = {
     }
   },
   findById(id: string) {
-    return this.getAll().find((a) => a.id === id) || null;
+    const target = (id || '').trim().toLowerCase();
+    return this.getAll().find((a) => a.id === id || (a.username || '').trim().toLowerCase() === target) || null;
   },
   findByUsername(username: string) {
     const target = (username || '').trim().toLowerCase();
@@ -1447,7 +1448,8 @@ export const accountStore = {
   },
   update(id: string, patch: Partial<User>) {
     const accounts = this.getAll();
-    const idx = accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     accounts[idx] = { ...accounts[idx], ...patch };
     this.saveAll(accounts);
@@ -1455,7 +1457,8 @@ export const accountStore = {
   },
   remove(id: string) {
     const accounts = this.getAll();
-    const idx = accounts.findIndex((a) => a.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = accounts.splice(idx, 1)[0];
     this.saveAll(accounts);
@@ -1468,7 +1471,8 @@ export const accountStore = {
   },
   removePending(id: string) {
     const state = getAccountsState();
-    const idx = state.pendingUsers.findIndex((p) => p.id === id);
+    const target = (id || '').trim().toLowerCase();
+    const idx = state.pendingUsers.findIndex((p) => p.id === id || (p.username || '').trim().toLowerCase() === target);
     if (idx === -1) return null;
     const removed = state.pendingUsers.splice(idx, 1)[0];
     this.saveAll(state.accounts, state.pendingUsers);

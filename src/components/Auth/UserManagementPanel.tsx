@@ -146,17 +146,26 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
 
   const handleApprove = async () => {
     if (!approveTarget) return;
-    await approvePendingUserApi(approveTarget.id, approveRole, approveTenantId || undefined);
-    setApproveTarget(null);
-    await loadAll();
-    onDataChange?.();
+    try {
+      await approvePendingUserApi(approveTarget.id, approveRole, approveTenantId || undefined);
+      setApproveTarget(null);
+      await loadAll();
+      onDataChange?.();
+    } catch (err: any) {
+      alert(err.message || 'Gagal menyetujui akun');
+    }
   };
 
   const handleReject = async () => {
     if (!rejectTarget) return;
-    await rejectPendingUserApi(rejectTarget.id);
-    setRejectTarget(null);
-    await loadAll();
+    try {
+      await rejectPendingUserApi(rejectTarget.id);
+      setRejectTarget(null);
+      await loadAll();
+      onDataChange?.();
+    } catch (err: any) {
+      alert(err.message || 'Gagal menolak permohonan akun');
+    }
   };
 
   const handleEditUser = async (e: React.FormEvent) => {
@@ -193,8 +202,11 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
       setDeleteTarget(null);
       await loadAll();
       onDataChange?.();
-    } catch { /* silent */ }
-    setDeleteLoading(false);
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus user');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleCreateAccount = async (e: React.FormEvent) => {
