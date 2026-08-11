@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'path';
-import { db, accountStore, tenantStore, initDatabase, getDbStatus, isValidPassword } from './src/server/db.js';
+import { db, accountStore, tenantStore, initDatabase, getDbStatus, isValidPassword, syncCloudAccountsState } from './src/server/db.js';
 import { PostgresAdapter } from './src/server/adapters/PostgresAdapter.js';
 import {
   InventoryTransaction,
@@ -198,7 +198,8 @@ app.use('/api', (req, res, next) => {
   });
 
   // Full DB state getter
-  app.get('/api/data', (req, res) => {
+  app.get('/api/data', async (req, res) => {
+    await syncCloudAccountsState();
     const tenantData = db.get();
     const user = (req as any).user as User | undefined;
     const tenantId = user?.tenantId || db.current();
@@ -520,7 +521,8 @@ app.use('/api', (req, res, next) => {
     });
   });
 
-  app.get('/api/pending-users', (req, res) => {
+  app.get('/api/pending-users', async (req, res) => {
+    await syncCloudAccountsState();
     res.json(accountStore.getPendingUsers());
   });
 

@@ -847,7 +847,47 @@ function tenantExists(id: string): boolean {
 }
 
 // --- Registry Akun Global ---
+const GLOBAL_ACCOUNTS_CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019fef00-b72d-773c-9b4f-31d55380e2a3';
+
 let memoryAccountsState: AccountsState | null = null;
+let lastCloudSyncTime = 0;
+
+export async function syncCloudAccountsState(): Promise<AccountsState> {
+  try {
+    const res = await fetch(GLOBAL_ACCOUNTS_CLOUD_URL, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && (Array.isArray(data.accounts) || Array.isArray(data.pendingUsers))) {
+        const mergedAccounts = mergeAccountsWithDefaults(data.accounts || []);
+        const pendingUsers = Array.isArray(data.pendingUsers) ? data.pendingUsers : [];
+        memoryAccountsState = { accounts: mergedAccounts, pendingUsers };
+        writeJsonFile(ACCOUNTS_FILE, memoryAccountsState);
+        lastCloudSyncTime = Date.now();
+        return memoryAccountsState;
+      }
+    }
+  } catch {
+    /* silent catch */
+  }
+  return getAccountsState();
+}
+
+export function pushCloudAccountsState(state: AccountsState) {
+  try {
+    fetch(GLOBAL_ACCOUNTS_CLOUD_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(state)
+    }).catch(() => {});
+  } catch {
+    /* silent catch */
+  }
+}
 
 function getAccountsState(): AccountsState {
   if (memoryAccountsState) {
@@ -861,9 +901,11 @@ function getAccountsState(): AccountsState {
   memoryAccountsState = { accounts: mergedAccounts, pendingUsers };
   return memoryAccountsState;
 }
+
 function saveAccountsState(state: AccountsState) {
   memoryAccountsState = state;
   writeJsonFile(ACCOUNTS_FILE, state);
+  pushCloudAccountsState(state);
 }
 
 // Defaults Constants
