@@ -301,7 +301,8 @@ app.use('/api', (req, res, next) => {
     }
   }
 
-  app.post('/api/auth/register', (req, res) => {
+  app.post('/api/auth/register', async (req, res) => {
+    await syncCloudAccountsState();
     const { username, name, email, unit, password: pwd, requestedRole } = req.body;
     if (
       accountStore.findByUsername(username) ||
@@ -338,7 +339,7 @@ app.use('/api', (req, res, next) => {
       registeredAt: new Date().toISOString(),
       tenantId: tenantMatch?.id,
     };
-    accountStore.addPending(newPending);
+    await accountStore.addPendingAsync(newPending);
     const targetTenant = tenantMatch?.id || 'lab-sentral';
     pushAudit(targetTenant, {
       action: 'REGISTRASI_AKUN',
@@ -526,8 +527,9 @@ app.use('/api', (req, res, next) => {
     res.json(accountStore.getPendingUsers());
   });
 
-  app.post('/api/pending-users/:id/approve', (req, res) => {
-    const pending = accountStore.removePending(req.params.id);
+  app.post('/api/pending-users/:id/approve', async (req, res) => {
+    await syncCloudAccountsState();
+    const pending = await accountStore.removePendingAsync(req.params.id);
     if (!pending) { res.status(404).json({ error: 'Pending user not found' }); return; }
     const tenantId = req.body.tenantId || pending.tenantId || 'lab-sentral';
     const tenant = tenantStore.find(tenantId);
@@ -544,7 +546,7 @@ app.use('/api', (req, res, next) => {
       status: 'Aktif',
       createdAt: new Date().toISOString(),
     };
-    accountStore.add(newUser);
+    await accountStore.addAsync(newUser);
     pushAudit(tenantId, {
       action: 'APPROVE_USER',
       targetId: newUser.id,
@@ -554,8 +556,9 @@ app.use('/api', (req, res, next) => {
     res.json({ ...safeUser, tenantName: tenant?.name || '' });
   });
 
-  app.post('/api/pending-users/:id/reject', (req, res) => {
-    const removed = accountStore.removePending(req.params.id);
+  app.post('/api/pending-users/:id/reject', async (req, res) => {
+    await syncCloudAccountsState();
+    const removed = await accountStore.removePendingAsync(req.params.id);
     if (!removed) { res.status(404).json({ error: 'Pending user not found' }); return; }
     if (removed.tenantId) {
       pushAudit(removed.tenantId, {
@@ -574,7 +577,8 @@ app.use('/api', (req, res, next) => {
     res.json(users);
   });
 
-  app.put('/api/users/:id', (req, res) => {
+  app.put('/api/users/:id', async (req, res) => {
+    await syncCloudAccountsState();
     const current = accountStore.findById(req.params.id);
     if (!current) { res.status(404).json({ error: 'User not found' }); return; }
 
@@ -591,14 +595,14 @@ app.use('/api', (req, res, next) => {
       }
     }
 
-    const updated = accountStore.update(req.params.id, {
-      ...(name ? { name } : {}),
-      ...(username ? { username } : {}),
-      ...(email ? { email } : {}),
-      ...(unit ? { unit } : {}),
-      ...(role ? { role } : {}),
-      ...(status ? { status } : {}),
-      ...(tenantId ? { tenantId } : {}),
+    const updated = await accountStore.updateAsync(req.params.id, {
+      ...(name !== undefined ? { name } : {}),
+      ...(username !== undefined ? { username } : {}),
+      ...(email !== undefined ? { email } : {}),
+      ...(unit !== undefined ? { unit } : {}),
+      ...(role !== undefined ? { role } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(tenantId !== undefined ? { tenantId } : {}),
       ...(password && password.trim() !== '' ? { password } : {}),
     });
     if (!updated) { res.status(404).json({ error: 'User not found' }); return; }
@@ -614,8 +618,9 @@ app.use('/api', (req, res, next) => {
     res.json({ ...safeUser, tenantName: tenant?.name || '' });
   });
 
-  app.delete('/api/users/:id', (req, res) => {
-    const deletedUser = accountStore.remove(req.params.id);
+  app.delete('/api/users/:id', async (req, res) => {
+    await syncCloudAccountsState();
+    const deletedUser = await accountStore.removeAsync(req.params.id);
     if (!deletedUser) { res.status(404).json({ error: 'User not found' }); return; }
 
     const tenant = tenantStore.find(deletedUser.tenantId || 'lab-sentral');

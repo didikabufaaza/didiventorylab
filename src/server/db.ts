@@ -920,6 +920,15 @@ function saveAccountsState(state: AccountsState) {
   pushCloudAccountsState(state);
 }
 
+export async function saveAccountsStateWithAdapter(state: AccountsState): Promise<void> {
+  memoryAccountsState = state;
+  writeJsonFile(ACCOUNTS_FILE, state);
+  pushCloudAccountsState(state);
+  if (activeAdapter) {
+    await activeAdapter.saveAccounts(state);
+  }
+}
+
 // Defaults Constants
 export const DEFAULT_TENANTS: TenantInfo[] = [
   {
@@ -1431,63 +1440,95 @@ export const accountStore = {
     ensureMultiTenantInitialized();
     return getAccountsState().pendingUsers;
   },
-  saveAll(accounts: User[], pendingUsers: PendingUser[] = this.getPendingUsers()) {
-    const state = { accounts, pendingUsers };
-    saveAccountsState(state);
-    if (activeAdapter) {
-      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter Save Accounts Error]:', e));
-    }
-  },
-  savePendingUsers(pendingUsers: PendingUser[]) {
-    const state = { accounts: this.getAll(), pendingUsers };
-    saveAccountsState(state);
-    if (activeAdapter) {
-      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter Save Pending Users Error]:', e));
-    }
-  },
   findById(id: string) {
-    const target = (id || '').trim().toLowerCase();
-    return this.getAll().find((a) => a.id === id || (a.username || '').trim().toLowerCase() === target) || null;
+    // Only match by exact id — do NOT fallback to username to avoid accidental matches
+    return this.getAll().find((a) => a.id === id) || null;
   },
   findByUsername(username: string) {
     const target = (username || '').trim().toLowerCase();
     return this.getAll().find((a) => (a.username || '').trim().toLowerCase() === target) || null;
   },
+  async addAsync(account: User): Promise<void> {
+    const state = getAccountsState();
+    state.accounts.push(account);
+    await saveAccountsStateWithAdapter(state);
+  },
   add(account: User) {
-    const accounts = this.getAll();
-    accounts.push(account);
-    this.saveAll(accounts);
+    const state = getAccountsState();
+    state.accounts.push(account);
+    saveAccountsState(state);
+    if (activeAdapter) {
+      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter Save Accounts Error]:', e));
+    }
+  },
+  async updateAsync(id: string, patch: Partial<User>): Promise<User | null> {
+    const state = getAccountsState();
+    const idx = state.accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    state.accounts[idx] = { ...state.accounts[idx], ...patch };
+    await saveAccountsStateWithAdapter(state);
+    return state.accounts[idx];
   },
   update(id: string, patch: Partial<User>) {
-    const accounts = this.getAll();
-    const target = (id || '').trim().toLowerCase();
-    const idx = accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
+    const state = getAccountsState();
+    const idx = state.accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
-    accounts[idx] = { ...accounts[idx], ...patch };
-    this.saveAll(accounts);
-    return accounts[idx];
+    state.accounts[idx] = { ...state.accounts[idx], ...patch };
+    saveAccountsState(state);
+    if (activeAdapter) {
+      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter Update Error]:', e));
+    }
+    return state.accounts[idx];
+  },
+  async removeAsync(id: string): Promise<User | null> {
+    const state = getAccountsState();
+    const idx = state.accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const removed = state.accounts.splice(idx, 1)[0];
+    await saveAccountsStateWithAdapter(state);
+    return removed;
   },
   remove(id: string) {
-    const accounts = this.getAll();
-    const target = (id || '').trim().toLowerCase();
-    const idx = accounts.findIndex((a) => a.id === id || (a.username || '').trim().toLowerCase() === target);
+    const state = getAccountsState();
+    const idx = state.accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
-    const removed = accounts.splice(idx, 1)[0];
-    this.saveAll(accounts);
+    const removed = state.accounts.splice(idx, 1)[0];
+    saveAccountsState(state);
+    if (activeAdapter) {
+      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter Remove Error]:', e));
+    }
     return removed;
+  },
+  async addPendingAsync(pending: PendingUser): Promise<void> {
+    const state = getAccountsState();
+    state.pendingUsers.unshift(pending);
+    await saveAccountsStateWithAdapter(state);
   },
   addPending(pending: PendingUser) {
     const state = getAccountsState();
     state.pendingUsers.unshift(pending);
-    this.saveAll(state.accounts, state.pendingUsers);
+    saveAccountsState(state);
+    if (activeAdapter) {
+      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter AddPending Error]:', e));
+    }
+  },
+  async removePendingAsync(id: string): Promise<PendingUser | null> {
+    const state = getAccountsState();
+    const idx = state.pendingUsers.findIndex((p) => p.id === id);
+    if (idx === -1) return null;
+    const removed = state.pendingUsers.splice(idx, 1)[0];
+    await saveAccountsStateWithAdapter(state);
+    return removed;
   },
   removePending(id: string) {
     const state = getAccountsState();
-    const target = (id || '').trim().toLowerCase();
-    const idx = state.pendingUsers.findIndex((p) => p.id === id || (p.username || '').trim().toLowerCase() === target);
+    const idx = state.pendingUsers.findIndex((p) => p.id === id);
     if (idx === -1) return null;
     const removed = state.pendingUsers.splice(idx, 1)[0];
-    this.saveAll(state.accounts, state.pendingUsers);
+    saveAccountsState(state);
+    if (activeAdapter) {
+      activeAdapter.saveAccounts(state).catch((e) => console.error('[Adapter RemovePending Error]:', e));
+    }
     return removed;
   },
 };
