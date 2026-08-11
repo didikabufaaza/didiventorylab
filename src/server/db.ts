@@ -908,6 +908,13 @@ export async function saveAccountsStateWithAdapter(state: AccountsState): Promis
   memoryAccountsState = state;
   writeJsonFile(ACCOUNTS_FILE, state);
   pushCloudAccountsState(state);
+  if (!activeAdapter) {
+    try {
+      activeAdapter = await getDatabaseAdapter();
+    } catch (e) {
+      console.error('[saveAccountsStateWithAdapter] Failed to init adapter:', e);
+    }
+  }
   if (activeAdapter) {
     await activeAdapter.saveAccounts(state);
   }
