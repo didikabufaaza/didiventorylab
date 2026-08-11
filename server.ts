@@ -194,7 +194,7 @@ app.use('/api', (req, res, next) => {
 
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok', version: 'relational-v1', timestamp: new Date().toISOString() });
   });
 
   // Full DB state getter
