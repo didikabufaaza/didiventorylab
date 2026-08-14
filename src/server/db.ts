@@ -20,7 +20,37 @@ import {
   DEFAULT_LETTERHEAD,
 } from '../types.js';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const isVercel = !!process.env.VERCEL;
+const BUNDLE_DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'lrims_data') : BUNDLE_DATA_DIR;
+
+function copyFolderSync(from: string, to: string) {
+  if (!fs.existsSync(to)) {
+    fs.mkdirSync(to, { recursive: true });
+  }
+  if (!fs.existsSync(from)) return;
+  fs.readdirSync(from).forEach(element => {
+    const fromPath = path.join(from, element);
+    const toPath = path.join(to, element);
+    const stat = fs.lstatSync(fromPath);
+    if (stat.isFile()) {
+      fs.copyFileSync(fromPath, toPath);
+    } else if (stat.isDirectory()) {
+      copyFolderSync(fromPath, toPath);
+    }
+  });
+}
+
+if (isVercel) {
+  try {
+    console.log('[Vercel Init] Copying local database seed files recursively from bundle to writable /tmp...');
+    copyFolderSync(BUNDLE_DATA_DIR, DATA_DIR);
+    console.log('[Vercel Init] Local database seed files copied successfully.');
+  } catch (err) {
+    console.error('Failed to initialize writable temp data directory:', err);
+  }
+}
+
 const DB_FILE = path.join(DATA_DIR, 'lrims_db.json');
 const TENANTS_DIR = path.join(DATA_DIR, 'tenants');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
@@ -893,12 +923,13 @@ function getAccountsState(): AccountsState {
   if (memoryAccountsState) {
     return memoryAccountsState;
   }
-  const fallback: AccountsState = { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
-  const res = readJsonFile<AccountsState>(ACCOUNTS_FILE, fallback);
-  const rawAccounts = res && Array.isArray(res.accounts) && res.accounts.length > 0 ? res.accounts : DEFAULT_ACCOUNTS;
-  const mergedAccounts = mergeAccountsWithDefaults(rawAccounts);
-  const pendingUsers = res && Array.isArray(res.pendingUsers) ? res.pendingUsers : [];
-  memoryAccountsState = { accounts: mergedAccounts, pendingUsers };
+  const res = readJsonFile<AccountsState>(ACCOUNTS_FILE, null);
+  if (!res || !Array.isArray(res.accounts) || res.accounts.length === 0) {
+    memoryAccountsState = { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
+    writeJsonFile(ACCOUNTS_FILE, memoryAccountsState);
+    return memoryAccountsState;
+  }
+  memoryAccountsState = { accounts: res.accounts, pendingUsers: res.pendingUsers || [] };
   return memoryAccountsState;
 }
 
@@ -1030,18 +1061,6 @@ export const DEFAULT_ACCOUNTS: User[] = [
     createdAt: '2026-08-09T07:07:03.963Z',
   },
   {
-    id: 'usr-2',
-    name: 'Siti Aminah, A.Md.AK',
-    username: 'siti',
-    email: 'siti@lab.hospital.id',
-    role: 'Admin Inventory',
-    unit: 'Gudang Reagen',
-    status: 'Aktif',
-    password: '123456',
-    tenantId: 'lab-sentral',
-    createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
     id: 'usr-3',
     name: 'Budi Santoso, S.ST',
     username: 'budi',
@@ -1052,78 +1071,6 @@ export const DEFAULT_ACCOUNTS: User[] = [
     password: 'password123',
     tenantId: 'lab-sentral',
     createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
-    id: 'usr-5',
-    name: 'Ahmad Fauzi, SE',
-    username: 'ahmad',
-    email: 'auditor@hospital.id',
-    role: 'Auditor',
-    unit: 'Satuan Pengawas Internal',
-    status: 'Aktif',
-    password: 'password123',
-    tenantId: 'lab-sentral',
-    createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
-    id: 'acc-utdrs-01',
-    name: 'Drs. Aditya Pratama, M.Kes',
-    username: 'aditya',
-    email: 'aditya@utdrs.rsud.id',
-    role: 'Admin Inventory',
-    unit: 'UTDRS',
-    status: 'Aktif',
-    password: '111',
-    tenantId: 'utdrs',
-    createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
-    id: 'acc-utdrs-02',
-    name: 'Dewi Lestari, A.Md.AK',
-    username: 'dewi',
-    email: 'dewi@utdrs.rsud.id',
-    role: 'Petugas Laboratorium',
-    unit: 'UTDRS',
-    status: 'Aktif',
-    password: 'utdrs123',
-    tenantId: 'utdrs',
-    createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
-    id: 'acc-utdrs-03',
-    name: 'Dr. Surya Wibowo, Sp.PK',
-    username: 'surya',
-    email: 'surya@utdrs.rsud.id',
-    role: 'Manajemen',
-    unit: 'UTDRS',
-    status: 'Aktif',
-    password: 'utdrs123',
-    tenantId: 'utdrs',
-    createdAt: '2026-08-09T07:07:03.963Z',
-  },
-  {
-    id: 'acc-1786259738898',
-    name: 'Ns. Test Multi-Tenant',
-    username: 'mt_test',
-    email: 'mt@utdrs.rs.id',
-    role: 'Admin Inventory',
-    unit: 'UTDRS',
-    status: 'Aktif',
-    password: 'test123',
-    tenantId: 'utdrs',
-    createdAt: '2026-08-09T07:15:38.898Z',
-  },
-  {
-    id: 'acc-1786281667703',
-    name: 'Siti Rahma',
-    username: 'sitirahma',
-    email: 'sitirahma@lab.id',
-    role: 'Petugas Laboratorium',
-    unit: 'Database Instalasi Imuno-Serologi',
-    status: 'Aktif',
-    password: 'password123',
-    tenantId: 'db-instalasi-imuno-serologi-482',
-    createdAt: '2026-08-09T13:21:07.703Z',
   },
 ];
 
@@ -1390,11 +1337,13 @@ export async function initDatabase(): Promise<IDatabaseAdapter> {
       if (adapterAccounts && Array.isArray(adapterAccounts.accounts) && adapterAccounts.accounts.length > 0) {
         memoryAccountsState = adapterAccounts;
         saveAccountsState(adapterAccounts);
-        console.log(`[DB Init] Accounts loaded from adapter: ${adapterAccounts.accounts.length} active, ${adapterAccounts.pendingUsers.length} pending`);
+        console.log(`[DB Init] Accounts loaded from adapter: ${adapterAccounts.accounts.length} active`);
       } else {
         // Adapter empty → push local to adapter
         const localAccounts = getAccountsState();
         await activeAdapter.saveAccounts(localAccounts);
+        memoryAccountsState = localAccounts;
+        saveAccountsState(localAccounts);
         console.log(`[DB Init] Pushed local accounts to adapter: ${localAccounts.accounts.length} active`);
       }
 
@@ -1620,6 +1569,7 @@ export const accountStore = {
 
 class DBManager {
   private cache = new Map<string, DBData>();
+  private lastTenantLoadTime = new Map<string, number>();
   private currentTenantId: string;
 
   constructor() {
@@ -1657,6 +1607,35 @@ class DBManager {
     this.ensureLoaded(tenantId);
   }
 
+  async loadTenant(tenantId: string, force = false): Promise<DBData> {
+    if (!tenantId) tenantId = 'lab-sentral';
+    this.currentTenantId = tenantId;
+
+    const now = Date.now();
+    const lastLoad = this.lastTenantLoadTime.get(tenantId) || 0;
+    const isCached = this.cache.has(tenantId);
+
+    if (!force && isCached && (now - lastLoad) < 3000) {
+      return this.cache.get(tenantId)!;
+    }
+
+    if (activeAdapter) {
+      try {
+        const data = await activeAdapter.getTenantData(tenantId);
+        if (data) {
+          this.cache.set(tenantId, data);
+          this.lastTenantLoadTime.set(tenantId, now);
+          return data;
+        }
+      } catch (err) {
+        console.error(`[DBManager] Failed to load tenant ${tenantId} from adapter:`, err);
+      }
+    }
+    this.ensureLoaded(tenantId);
+    this.lastTenantLoadTime.set(tenantId, now);
+    return this.cache.get(tenantId)!;
+  }
+
   current() {
     return this.currentTenantId;
   }
@@ -1666,26 +1645,28 @@ class DBManager {
     return this.cache.get(this.currentTenantId)!;
   }
 
-  save() {
+  async save(): Promise<void> {
     this.ensureLoaded(this.currentTenantId);
     const data = this.cache.get(this.currentTenantId);
     if (data) {
       writeJsonFile(getTenantFile(this.currentTenantId), data);
       if (activeAdapter) {
-        activeAdapter
-          .saveTenantData(this.currentTenantId, data)
-          .catch((err) => console.error(`[Adapter Save TenantData ${this.currentTenantId} Error]:`, err));
+        try {
+          await activeAdapter.saveTenantData(this.currentTenantId, data);
+        } catch (err) {
+          console.error(`[Adapter Save TenantData ${this.currentTenantId} Error]:`, err);
+        }
       }
     }
   }
 
-  reset() {
+  async reset() {
     const initial = seedTenantData();
     this.cache.set(this.currentTenantId, initial);
-    this.save();
+    await this.save();
   }
 
-  clearOperationalData(clearMaster: boolean = true) {
+  async clearOperationalData(clearMaster: boolean = true) {
     const current = this.get();
     const updated = {
       ...current,
@@ -1699,7 +1680,7 @@ class DBManager {
       notifications: [],
     };
     this.cache.set(this.currentTenantId, updated);
-    this.save();
+    await this.save();
   }
 }
 

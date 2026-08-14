@@ -48,9 +48,9 @@ export class PostgresAdapter implements IDatabaseAdapter {
         ssl: this.connectionString.includes('localhost') || this.connectionString.includes('127.0.0.1')
           ? false
           : { rejectUnauthorized: false },
-        max: 5,
-        min: 1,
-        idleTimeoutMillis: 60000,
+        max: 2,
+        min: 0,
+        idleTimeoutMillis: 10000,
         connectionTimeoutMillis: 5000,
         allowExitOnIdle: false,
       });
@@ -451,55 +451,119 @@ export class PostgresAdapter implements IDatabaseAdapter {
         [tenantId, JSON.stringify(data)]
       );
 
-      // Sync Master Reagents into lrims_reagents table
+      // Sync Master Reagents into lrims_reagents table (Bulk)
       if (Array.isArray(data.reagents)) {
-        for (const r of data.reagents) {
+        if (data.reagents.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const r of data.reagents) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(r.id, tenantId, r.code, r.name, r.brand, r.category, r.unit, r.minimumStock || 0, r.price || 0);
+            index += 9;
+          }
           await client.query(
             `INSERT INTO lrims_reagents (id, tenant_id, code, name, brand, category, unit, min_stock, purchase_price, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+             VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
                name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category,
                unit = EXCLUDED.unit, min_stock = EXCLUDED.min_stock, purchase_price = EXCLUDED.purchase_price, updated_at = NOW()`,
-            [r.id, tenantId, r.code, r.name, r.brand, r.category, r.unit, r.minimumStock || 0, r.price || 0]
+            values
           );
+          
+          const reagentIds = data.reagents.map(r => r.id);
+          await client.query(
+            `DELETE FROM lrims_reagents WHERE tenant_id = $1 AND id NOT IN (${reagentIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...reagentIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_reagents WHERE tenant_id = $1', [tenantId]);
         }
       }
 
-      // Sync Batches into lrims_batches table
+      // Sync Batches into lrims_batches table (Bulk)
       if (Array.isArray(data.batches)) {
-        for (const b of data.batches) {
+        if (data.batches.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const b of data.batches) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(b.id, tenantId, b.reagentId, b.reagentName, b.lotNumber, b.barcode, b.currentQuantity || 0, b.expiryDate, b.status);
+            index += 9;
+          }
           await client.query(
             `INSERT INTO lrims_batches (id, tenant_id, reagent_id, reagent_name, lot_number, barcode, current_quantity, expiry_date, status, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+             VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
                current_quantity = EXCLUDED.current_quantity, expiry_date = EXCLUDED.expiry_date, status = EXCLUDED.status, updated_at = NOW()`,
-            [b.id, tenantId, b.reagentId, b.reagentName, b.lotNumber, b.barcode, b.currentQuantity || 0, b.expiryDate, b.status]
+            values
           );
+          
+          const batchIds = data.batches.map(b => b.id);
+          await client.query(
+            `DELETE FROM lrims_batches WHERE tenant_id = $1 AND id NOT IN (${batchIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...batchIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_batches WHERE tenant_id = $1', [tenantId]);
         }
       }
 
-      // Sync Transactions into lrims_transactions table
+      // Sync Transactions into lrims_transactions table (Bulk)
       if (Array.isArray(data.transactions)) {
-        for (const t of data.transactions) {
+        if (data.transactions.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const t of data.transactions) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6})`);
+            values.push(t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName);
+            index += 7;
+          }
           await client.query(
             `INSERT INTO lrims_transactions (id, tenant_id, transaction_number, type, date, total_amount, user_name, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+             VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO NOTHING`,
-            [t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName]
+            values
           );
+          
+          const transactionIds = data.transactions.map(t => t.id);
+          await client.query(
+            `DELETE FROM lrims_transactions WHERE tenant_id = $1 AND id NOT IN (${transactionIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...transactionIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_transactions WHERE tenant_id = $1', [tenantId]);
         }
       }
 
-      // Sync Purchase Orders into lrims_purchase_orders table
+      // Sync Purchase Orders into lrims_purchase_orders table (Bulk)
       if (Array.isArray(data.purchaseOrders)) {
-        for (const po of data.purchaseOrders) {
+        if (data.purchaseOrders.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const po of data.purchaseOrders) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, po.subtotal || 0, po.tax || 0, po.total || 0, po.status);
+            index += 9;
+          }
           await client.query(
             `INSERT INTO lrims_purchase_orders (id, tenant_id, po_number, order_date, supplier_name, subtotal, tax, total, status, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+             VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
                status = EXCLUDED.status, subtotal = EXCLUDED.subtotal, tax = EXCLUDED.tax, total = EXCLUDED.total, updated_at = NOW()`,
-            [po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, po.subtotal || 0, po.tax || 0, po.total || 0, po.status]
+            values
           );
+          
+          const poIds = data.purchaseOrders.map(po => po.id);
+          await client.query(
+            `DELETE FROM lrims_purchase_orders WHERE tenant_id = $1 AND id NOT IN (${poIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...poIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_purchase_orders WHERE tenant_id = $1', [tenantId]);
         }
       }
 

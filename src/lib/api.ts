@@ -477,3 +477,27 @@ export async function migrateDatabaseApi(): Promise<{ ok: boolean; message: stri
     method: 'POST',
   });
 }
+
+export async function deleteTransactionApi(id: string): Promise<any> {
+  return request<any>(`/transactions/${id}`, { method: 'DELETE' });
+}
+
+export async function updateTransactionApi(id: string, payload: any): Promise<any> {
+  return request<any>(`/transactions/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteStockOpnameApi(id: string): Promise<any> {
+  return request<any>(`/stock-opnames/${id}`, { method: 'DELETE' });
+}
+
+export async function updateStockOpnameApi(id: string, payload: any): Promise<any> {
+  return request<any>(`/stock-opnames/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}

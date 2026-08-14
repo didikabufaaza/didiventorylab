@@ -63,27 +63,27 @@ export async function buildApp() {
     res.status(403).json({ error: msg });
   };
 
-  const pushAudit = (
+  const pushAudit = async (
     tenantId: string,
     entry: { action: string; module?: string; targetId?: string; details: string }
   ) => {
     if (!tenantId || !tenantStoreAllExists(tenantId)) return;
     const prev = db.current();
-    db.bind(tenantId);
+    await db.loadTenant(tenantId, true);
     const data = db.get();
     data.auditLogs.unshift({
       id: `audn-${Date.now()}`,
       timestamp: new Date().toLocaleString('id-ID'),
       userId: 'usr-admin',
-      userName: 'Super Admin',
+      userName: 'System Administrator',
       userRole: 'Super Admin',
       action: entry.action,
       module: entry.module || 'Manajemen User',
       targetId: entry.targetId || '',
       details: entry.details,
     });
-    db.save();
-    db.bind(prev);
+    await db.save();
+    await db.loadTenant(prev, true);
   };
 
   function tenantStoreAllExists(tenantId: string): boolean {
@@ -98,8 +98,23 @@ export async function buildApp() {
   // 4) Peran read-only (Manajemen/Auditor) tidak boleh mutasi
   //    kecuali pengecualian khusus.
   // ============================================================
-  app.use('/api', (req, res, next) => {
+  app.use('/api', async (req, res, next) => {
     const fullUrl = req.originalUrl.split('?')[0];
+    const isWriteRequest = req.method !== 'GET';
+
+    const isAuthOrUserRoute =
+      fullUrl === '/api/auth/login' ||
+      fullUrl === '/api/auth/register' ||
+      fullUrl.startsWith('/api/users') ||
+      fullUrl.startsWith('/api/pending-users') ||
+      fullUrl.startsWith('/api/tenants');
+
+    try {
+      const forceSync = isWriteRequest && isAuthOrUserRoute;
+      await syncCloudAccountsState(forceSync);
+    } catch (e) {
+      console.error('[Middleware Accounts Sync Error]:', e);
+    }
 
     // Public endpoints
     const isPublic =
@@ -117,18 +132,18 @@ export async function buildApp() {
     const auth = req.headers.authorization || '';
     const token = auth.replace(/^Bearer\s+/i, '');
     const session = resolveSession(token);
-  if (session) {
-    const account = accountStore.findById(session.accountId);
-    if (account && account.status === 'Aktif') {
-      (req as any).user = account;
-      (req as any).session = session;
-      db.bind(account.tenantId || 'lab-sentral');
+    if (session) {
+      const account = accountStore.findById(session.accountId);
+      if (account && account.status === 'Aktif') {
+        (req as any).user = account;
+        (req as any).session = session;
+        await db.loadTenant(account.tenantId || 'lab-sentral', isWriteRequest);
+      } else {
+        await db.loadTenant('lab-sentral', isWriteRequest);
+      }
     } else {
-      db.bind('lab-sentral');
+      await db.loadTenant('lab-sentral', isWriteRequest);
     }
-  } else {
-    db.bind('lab-sentral');
-  }
 
   const user = (req as any).user as User | undefined;
   const role = user ? getEffectiveRole(user) : null;
@@ -215,19 +230,19 @@ app.use('/api', (req, res, next) => {
   });
 
   // Reset database to initial seed
-  app.post('/api/reset-data', (req, res) => {
+  app.post('/api/reset-data', async (req, res) => {
     db.reset();
     res.json({ message: 'Database reset successfully', data: db.get() });
   });
 
-  app.post('/api/clear-data', (req, res) => {
+  app.post('/api/clear-data', async (req, res) => {
     const clearMaster = req.body?.clearMaster !== false;
     db.clearOperationalData(clearMaster);
     res.json({ message: 'Data cleared successfully', data: db.get() });
   });
 
   // AUTH ROUTES
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login',async (req, res) => {
     try {
       const { username, password } = req.body || {};
       const trimmedUsername = (username || '').trim();
@@ -237,6 +252,7 @@ app.use('/api', (req, res, next) => {
         return;
       }
 
+      await syncCloudAccountsState(true);
       const user = accountStore.findByUsername(trimmedUsername);
       if (!user) {
         // Cek jika username ada di pendingUsers
@@ -301,7 +317,7 @@ app.use('/api', (req, res, next) => {
     }
   }
 
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register',async (req, res) => {
     try {
       await syncCloudAccountsState();
       const { username, name, email, unit, password: pwd, requestedRole } = req.body;
@@ -342,7 +358,7 @@ app.use('/api', (req, res, next) => {
       };
       await accountStore.addPendingAsync(newPending);
       const targetTenant = tenantMatch?.id || 'lab-sentral';
-      pushAudit(targetTenant, {
+      await pushAudit(targetTenant, {
         action: 'REGISTRASI_AKUN',
         details: `Permohonan pendaftaran akun baru oleh ${name} (@${username}) dari unit '${unit || 'Laboratorium'}' dengan permohonan peran '${requestedRole || 'Petugas Laboratorium'}'`
       });
@@ -353,29 +369,35 @@ app.use('/api', (req, res, next) => {
     }
   });
 
-  app.post('/api/auth/reset-password', (req, res) => {
-    const { username, email, newPassword } = req.body || {};
-    if (!username || !email || !newPassword) {
-      res.status(400).json({ error: 'Username, email, dan password baru wajib diisi.' });
-      return;
+  app.post('/api/auth/reset-password',async (req, res) => {
+    try {
+      const { username, email, newPassword } = req.body || {};
+      if (!username || !email || !newPassword) {
+        res.status(400).json({ error: 'Username, email, dan password baru wajib diisi.' });
+        return;
+      }
+      await syncCloudAccountsState(true);
+      const user = accountStore
+        .getAll()
+        .find(
+          (a) =>
+            a.username.toLowerCase() === (username || '').toLowerCase() &&
+            a.email.toLowerCase() === (email || '').toLowerCase()
+        );
+      if (!user) {
+        res.status(404).json({ error: 'Akun dengan username dan email tersebut tidak ditemukan.' });
+        return;
+      }
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
+        return;
+      }
+      await accountStore.updateAsync(user.id, { password: newPassword });
+      res.json({ message: 'Password berhasil diperbarui. Silakan masuk dengan password baru Anda.' });
+    } catch (err: any) {
+      console.error('[POST /api/auth/reset-password Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal memperbarui password.' });
     }
-    const user = accountStore
-      .getAll()
-      .find(
-        (a) =>
-          a.username.toLowerCase() === (username || '').toLowerCase() &&
-          a.email.toLowerCase() === (email || '').toLowerCase()
-      );
-    if (!user) {
-      res.status(404).json({ error: 'Akun dengan username dan email tersebut tidak ditemukan.' });
-      return;
-    }
-    if (newPassword.length < 6) {
-      res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
-      return;
-    }
-    accountStore.update(user.id, { password: newPassword });
-    res.json({ message: 'Password berhasil diperbarui. Silakan masuk dengan password baru Anda.' });
   });
 
   // ============================================================
@@ -393,7 +415,7 @@ app.use('/api', (req, res, next) => {
   });
 
   // Uji Koneksi Database PostgreSQL Baru (Neon DB / Supabase / Insforge Dev / Generic Postgres)
-  app.post('/api/db/test-connection', async (req, res) => {
+  app.post('/api/db/test-connection',async (req, res) => {
     const { connectionString } = req.body || {};
     if (!connectionString) {
       res.status(400).json({ error: 'URL Koneksi Database PostgreSQL wajib diisi.' });
@@ -411,7 +433,7 @@ app.use('/api', (req, res, next) => {
   });
 
   // Sinkronisasi & Migrasi Data dari Lokal ke PostgreSQL
-  app.post('/api/db/migrate', async (req, res) => {
+  app.post('/api/db/migrate',async (req, res) => {
     try {
       const adapter = await initDatabase();
       await adapter.init(); // Pastikan seluruh 7 Tabel (Tenants, Accounts, TenantData, Reagents, Batches, Transactions, POs) terbuat di Neon DB
@@ -443,7 +465,7 @@ app.use('/api', (req, res, next) => {
   });
 
   // Tambah database/tenant baru (hanya Super Admin)
-  app.post('/api/tenants', (req, res) => {
+  app.post('/api/tenants', async (req, res) => {
     const { name, unit, description } = req.body || {};
     if (!name || !unit) {
       res.status(400).json({ error: 'Nama dan unit database wajib diisi.' });
@@ -467,35 +489,41 @@ app.use('/api', (req, res, next) => {
   });
 
   // Tambah akun baru ke database/tenant tertentu (hanya Super Admin)
-  app.post('/api/accounts', (req, res) => {
-    const { tenantId, name, username, password, email, unit, role, status } = req.body;
-    if (!tenantId || !tenantStore.find(tenantId)) {
-      res.status(400).json({ error: 'Database/tenant tidak valid.' });
-      return;
+  app.post('/api/accounts',async (req, res) => {
+    try {
+      await syncCloudAccountsState(true);
+      const { tenantId, name, username, password, email, unit, role, status } = req.body;
+      if (!tenantId || !tenantStore.find(tenantId)) {
+        res.status(400).json({ error: 'Database/tenant tidak valid.' });
+        return;
+      }
+      if (accountStore.findByUsername(username)) {
+        res.status(409).json({ error: 'Username sudah digunakan.' });
+        return;
+      }
+      const newAccount: User = {
+        id: `acc-${Date.now()}`,
+        tenantId,
+        name,
+        username,
+        password: password || 'password123',
+        email: email || '',
+        role,
+        unit: unit || tenantStore.find(tenantId)?.name || '',
+        status: status || 'Aktif',
+        createdAt: new Date().toISOString(),
+      };
+      await accountStore.addAsync(newAccount);
+      const { password: _pw, ...safe } = newAccount;
+      res.status(201).json(safe);
+    } catch (err: any) {
+      console.error('[POST /api/accounts Error]:', err);
+      res.status(500).json({ error: err.message || 'Gagal menambah akun.' });
     }
-    if (accountStore.findByUsername(username)) {
-      res.status(409).json({ error: 'Username sudah digunakan.' });
-      return;
-    }
-    const newAccount: User = {
-      id: `acc-${Date.now()}`,
-      tenantId,
-      name,
-      username,
-      password: password || 'password123',
-      email: email || '',
-      role,
-      unit: unit || tenantStore.find(tenantId)?.name || '',
-      status: status || 'Aktif',
-      createdAt: new Date().toISOString(),
-    };
-    accountStore.add(newAccount);
-    const { password: _pw, ...safe } = newAccount;
-    res.status(201).json(safe);
   });
 
   // SWITCH "Lihat Akun Sebagai" (hanya Super Admin & Impersonated Admin)
-  app.post('/api/auth/switch', (req, res) => {
+  app.post('/api/auth/switch', async (req, res) => {
     const current = (req as any).user as User;
     const sessionInfo = (req as any).session as SessionInfo | undefined;
     const { accountId } = req.body;
@@ -537,7 +565,7 @@ app.use('/api', (req, res, next) => {
     }
   });
 
-  app.post('/api/pending-users/:id/approve', async (req, res) => {
+  app.post('/api/pending-users/:id/approve',async (req, res) => {
     try {
       await syncCloudAccountsState();
       const pending = await accountStore.removePendingAsync(req.params.id);
@@ -558,7 +586,7 @@ app.use('/api', (req, res, next) => {
         createdAt: new Date().toISOString(),
       };
       await accountStore.addAsync(newUser);
-      pushAudit(tenantId, {
+      await pushAudit(tenantId, {
         action: 'APPROVE_USER',
         targetId: newUser.id,
         details: `Menyetujui pendaftaran akun baru: ${newUser.name} (@${newUser.username}) pada database ${tenant?.name || tenantId} sebagai ${role}`,
@@ -571,13 +599,13 @@ app.use('/api', (req, res, next) => {
     }
   });
 
-  app.post('/api/pending-users/:id/reject', async (req, res) => {
+  app.post('/api/pending-users/:id/reject',async (req, res) => {
     try {
       await syncCloudAccountsState();
       const removed = await accountStore.removePendingAsync(req.params.id);
       if (!removed) { res.status(404).json({ error: 'Pending user not found' }); return; }
       if (removed.tenantId) {
-        pushAudit(removed.tenantId, {
+        await pushAudit(removed.tenantId, {
           action: 'REJECT_USER',
           details: `Menolak pendaftaran akun: ${removed.name} (@${removed.username})`,
         });
@@ -603,7 +631,7 @@ app.use('/api', (req, res, next) => {
     }
   });
 
-  app.put('/api/users/:id', async (req, res) => {
+  app.put('/api/users/:id',async (req, res) => {
     try {
       const current = accountStore.findById(req.params.id);
       if (!current) { res.status(404).json({ error: 'User not found' }); return; }
@@ -634,7 +662,7 @@ app.use('/api', (req, res, next) => {
       if (!updated) { res.status(404).json({ error: 'User not found' }); return; }
 
       const tenant = tenantStore.find(updated.tenantId || 'lab-sentral');
-      pushAudit(updated.tenantId || 'lab-sentral', {
+      await pushAudit(updated.tenantId || 'lab-sentral', {
         action: 'UPDATE_USER',
         targetId: updated.id,
         details: `Memperbarui akun: ${updated.name} (@${updated.username}) pada database ${tenant?.name || 'lab-sentral'}`,
@@ -648,13 +676,13 @@ app.use('/api', (req, res, next) => {
     }
   });
 
-  app.delete('/api/users/:id', async (req, res) => {
+  app.delete('/api/users/:id',async (req, res) => {
     try {
       const deletedUser = await accountStore.removeAsync(req.params.id);
       if (!deletedUser) { res.status(404).json({ error: 'User not found' }); return; }
 
       const tenant = tenantStore.find(deletedUser.tenantId || 'lab-sentral');
-      pushAudit(deletedUser.tenantId || 'lab-sentral', {
+      await pushAudit(deletedUser.tenantId || 'lab-sentral', {
         action: 'DELETE_USER',
         targetId: deletedUser.id,
         details: `Menghapus akun: ${deletedUser.name} (@${deletedUser.username}) dari database ${tenant?.name || 'lab-sentral'}`,
@@ -671,7 +699,7 @@ app.use('/api', (req, res, next) => {
     res.json(db.get().reagents);
   });
 
-  app.post('/api/reagents', (req, res) => {
+  app.post('/api/reagents', async (req, res) => {
     const data = db.get();
     const newReagent = {
       ...req.body,
@@ -694,11 +722,11 @@ app.use('/api', (req, res, next) => {
       details: `Menambah master reagen baru: ${newReagent.name} (${newReagent.code})`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json(newReagent);
   });
 
-  app.put('/api/reagents/:id', (req, res) => {
+  app.put('/api/reagents/:id', async (req, res) => {
     const data = db.get();
     const index = data.reagents.findIndex((r) => r.id === req.params.id);
     if (index === -1) {
@@ -723,11 +751,11 @@ app.use('/api', (req, res, next) => {
       details: `Memperbarui master reagen: ${data.reagents[index].name}`,
     });
 
-    db.save();
+    await db.save();
     res.json(data.reagents[index]);
   });
 
-  app.delete('/api/reagents/:id', (req, res) => {
+  app.delete('/api/reagents/:id', async (req, res) => {
     const data = db.get();
     const index = data.reagents.findIndex((r) => r.id === req.params.id);
     if (index === -1) {
@@ -746,12 +774,12 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Menghapus master reagen: ${removed.name} (${removed.code})`,
     });
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
   // 1a. REAGENTS BATCH CRUD
-  app.post('/api/reagents/batch', (req, res) => {
+  app.post('/api/reagents/batch', async (req, res) => {
     const data = db.get();
     const reagentsList = req.body.reagents;
     if (!Array.isArray(reagentsList)) {
@@ -784,12 +812,12 @@ app.use('/api', (req, res, next) => {
       details: `Menambah ${inserted.length} master reagen baru secara massal (Smart Input)`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json(inserted);
   });
 
   // 1b. SUPPLIERS CRUD
-  app.post('/api/suppliers', (req, res) => {
+  app.post('/api/suppliers', async (req, res) => {
     const data = db.get();
     const newSupplier = {
       ...req.body,
@@ -810,11 +838,11 @@ app.use('/api', (req, res, next) => {
       targetId: newSupplier.id,
       details: `Menambah supplier baru: ${newSupplier.name}`,
     });
-    db.save();
+    await db.save();
     res.status(201).json(newSupplier);
   });
 
-  app.put('/api/suppliers/:id', (req, res) => {
+  app.put('/api/suppliers/:id', async (req, res) => {
     const data = db.get();
     const index = data.suppliers.findIndex((s) => s.id === req.params.id);
     if (index === -1) {
@@ -833,11 +861,11 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Memperbarui supplier: ${data.suppliers[index].name}`,
     });
-    db.save();
+    await db.save();
     res.json(data.suppliers[index]);
   });
 
-  app.delete('/api/suppliers/:id', (req, res) => {
+  app.delete('/api/suppliers/:id', async (req, res) => {
     const data = db.get();
     const index = data.suppliers.findIndex((s) => s.id === req.params.id);
     if (index === -1) {
@@ -856,12 +884,12 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Menghapus supplier: ${removed.name}`,
     });
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
   // 1c. LOCATIONS CRUD
-  app.post('/api/locations', (req, res) => {
+  app.post('/api/locations', async (req, res) => {
     const data = db.get();
     const newLoc = {
       ...req.body,
@@ -881,11 +909,11 @@ app.use('/api', (req, res, next) => {
       targetId: newLoc.id,
       details: `Menambah lokasi penyimpanan baru: ${newLoc.name}`,
     });
-    db.save();
+    await db.save();
     res.status(201).json(newLoc);
   });
 
-  app.put('/api/locations/:id', (req, res) => {
+  app.put('/api/locations/:id', async (req, res) => {
     const data = db.get();
     const index = data.locations.findIndex((l) => l.id === req.params.id);
     if (index === -1) {
@@ -904,11 +932,11 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Memperbarui lokasi: ${data.locations[index].name}`,
     });
-    db.save();
+    await db.save();
     res.json(data.locations[index]);
   });
 
-  app.delete('/api/locations/:id', (req, res) => {
+  app.delete('/api/locations/:id', async (req, res) => {
     const data = db.get();
     const index = data.locations.findIndex((l) => l.id === req.params.id);
     if (index === -1) {
@@ -927,12 +955,12 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Menghapus lokasi penyimpanan: ${removed.name}`,
     });
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
   // 1d. ANALYZERS CRUD
-  app.post('/api/analyzers', (req, res) => {
+  app.post('/api/analyzers', async (req, res) => {
     const data = db.get();
     const newAnalyzer = {
       ...req.body,
@@ -952,11 +980,11 @@ app.use('/api', (req, res, next) => {
       targetId: newAnalyzer.id,
       details: `Menambah analyzer & parameter baru: ${newAnalyzer.name}`,
     });
-    db.save();
+    await db.save();
     res.status(201).json(newAnalyzer);
   });
 
-  app.put('/api/analyzers/:id', (req, res) => {
+  app.put('/api/analyzers/:id', async (req, res) => {
     const data = db.get();
     const index = data.analyzers.findIndex((a) => a.id === req.params.id);
     if (index === -1) {
@@ -983,11 +1011,11 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Memperbarui analyzer: ${data.analyzers[index].name}`,
     });
-    db.save();
+    await db.save();
     res.json(data.analyzers[index]);
   });
 
-  app.delete('/api/analyzers/:id', (req, res) => {
+  app.delete('/api/analyzers/:id', async (req, res) => {
     const data = db.get();
     const index = data.analyzers.findIndex((a) => a.id === req.params.id);
     if (index === -1) {
@@ -1006,7 +1034,7 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Menghapus analyzer: ${removed.name}`,
     });
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
@@ -1015,7 +1043,7 @@ app.use('/api', (req, res, next) => {
   });
 
   // Edit batch/lot
-  app.put('/api/batches/:id', (req, res) => {
+  app.put('/api/batches/:id', async (req, res) => {
     const data = db.get();
     const batch = data.batches.find((b) => b.id === req.params.id);
     if (!batch) {
@@ -1038,12 +1066,12 @@ app.use('/api', (req, res, next) => {
       details: `Memperbarui lot ${prevLot} (${batch.reagentName})`,
     });
 
-    db.save();
+    await db.save();
     res.json(batch);
   });
 
   // Delete batch/lot
-  app.delete('/api/batches/:id', (req, res) => {
+  app.delete('/api/batches/:id', async (req, res) => {
     const data = db.get();
     const index = data.batches.findIndex((b) => b.id === req.params.id);
     if (index === -1) {
@@ -1064,11 +1092,117 @@ app.use('/api', (req, res, next) => {
       details: `Menghapus lot ${removed.lotNumber} (${removed.reagentName})`,
     });
 
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
-  app.put('/api/batches/:id/opened', (req, res) => {
+  // Delete transaction
+  app.delete('/api/transactions/:id', async (req, res) => {
+    const data = db.get();
+    const index = data.transactions.findIndex((t) => t.id === req.params.id);
+    if (index === -1) {
+      res.status(404).json({ error: 'Transaction not found' });
+      return;
+    }
+    const removed = data.transactions.splice(index, 1)[0];
+
+    data.auditLogs.unshift({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID'),
+      userId: 'usr-1',
+      userName: 'Super Admin',
+      userRole: 'Super Admin',
+      action: 'DELETE_TRANSACTION',
+      module: 'Transactions',
+      targetId: req.params.id,
+      details: `Menghapus transaksi ${removed.transactionNumber}`,
+    });
+
+    await db.save();
+    res.json({ success: true, id: req.params.id });
+  });
+
+  // Update transaction
+  app.put('/api/transactions/:id', async (req, res) => {
+    const data = db.get();
+    const transaction = data.transactions.find((t) => t.id === req.params.id);
+    if (!transaction) {
+      res.status(404).json({ error: 'Transaction not found' });
+      return;
+    }
+
+    Object.assign(transaction, req.body);
+
+    data.auditLogs.unshift({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID'),
+      userId: 'usr-1',
+      userName: 'Super Admin',
+      userRole: 'Super Admin',
+      action: 'UPDATE_TRANSACTION',
+      module: 'Transactions',
+      targetId: req.params.id,
+      details: `Memperbarui transaksi ${transaction.transactionNumber}`,
+    });
+
+    await db.save();
+    res.json(transaction);
+  });
+
+  // Delete stock-opname
+  app.delete('/api/stock-opnames/:id', async (req, res) => {
+    const data = db.get();
+    const index = data.stockOpnames.findIndex((so) => so.id === req.params.id);
+    if (index === -1) {
+      res.status(404).json({ error: 'Stock Opname not found' });
+      return;
+    }
+    const removed = data.stockOpnames.splice(index, 1)[0];
+
+    data.auditLogs.unshift({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID'),
+      userId: 'usr-1',
+      userName: 'Super Admin',
+      userRole: 'Super Admin',
+      action: 'DELETE_STOCK_OPNAME',
+      module: 'Stock Opname',
+      targetId: req.params.id,
+      details: `Menghapus stock opname ${removed.sessionNumber || ''} - ${removed.title}`,
+    });
+
+    await db.save();
+    res.json({ success: true, id: req.params.id });
+  });
+
+  // Update stock-opname
+  app.put('/api/stock-opnames/:id', async (req, res) => {
+    const data = db.get();
+    const so = data.stockOpnames.find((item) => item.id === req.params.id);
+    if (!so) {
+      res.status(404).json({ error: 'Stock Opname not found' });
+      return;
+    }
+
+    Object.assign(so, req.body);
+
+    data.auditLogs.unshift({
+      id: `aud-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID'),
+      userId: 'usr-1',
+      userName: 'Super Admin',
+      userRole: 'Super Admin',
+      action: 'UPDATE_STOCK_OPNAME',
+      module: 'Stock Opname',
+      targetId: req.params.id,
+      details: `Memperbarui stock opname ${so.sessionNumber || ''} - ${so.title}`,
+    });
+
+    await db.save();
+    res.json(so);
+  });
+
+  app.put('/api/batches/:id/opened', async (req, res) => {
     const data = db.get();
     const batch = data.batches.find((b) => b.id === req.params.id);
     if (!batch) {
@@ -1102,11 +1236,11 @@ app.use('/api', (req, res, next) => {
       details: `Membuka reagen ${batch.reagentName} (LOT: ${batch.lotNumber}). Batas stabilitas hingga ${openedExpiryDate}`,
     });
 
-    db.save();
+    await db.save();
     res.json(batch);
   });
 
-  app.put('/api/batches/:id/quarantine', (req, res) => {
+  app.put('/api/batches/:id/quarantine', async (req, res) => {
     const data = db.get();
     const batch = data.batches.find((b) => b.id === req.params.id);
     if (!batch) {
@@ -1129,12 +1263,12 @@ app.use('/api', (req, res, next) => {
       details: `Mengubah status lot ${batch.lotNumber} (${batch.reagentName}) menjadi ${batch.status}. Catatan: ${batch.notes}`,
     });
 
-    db.save();
+    await db.save();
     res.json(batch);
   });
 
   // 3. INVENTORY STOCK IN
-  app.post('/api/inventory/in', (req, res) => {
+  app.post('/api/inventory/in', async (req, res) => {
     const data = db.get();
     const {
       supplierId,
@@ -1280,12 +1414,12 @@ app.use('/api', (req, res, next) => {
       details: `Stock IN ${trxItems.length} item reagen (${transactionNumber}) senilai Rp ${totalAmount.toLocaleString('id-ID')}`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json({ transaction: newTransaction, batches: data.batches });
   });
 
   // 4. INVENTORY STOCK OUT (POS)
-  app.post('/api/inventory/out', (req, res) => {
+  app.post('/api/inventory/out', async (req, res) => {
     const data = db.get();
     const {
       destinationUnit,
@@ -1414,12 +1548,12 @@ app.use('/api', (req, res, next) => {
       details: `Pengeluaran ${trxItems.length} item reagen ke ${destinationUnit} [Keperluan: ${purpose}] (${transactionNumber})`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json({ transaction: newTransaction, batches: data.batches });
   });
 
   // 5. STOCK TRANSFER
-  app.post('/api/inventory/transfer', (req, res) => {
+  app.post('/api/inventory/transfer', async (req, res) => {
     const data = db.get();
     const { batchId, quantity, sourceLocationName, destinationLocationId, destinationLocationName, userId, userName, userRole, notes } = req.body;
 
@@ -1453,12 +1587,12 @@ app.use('/api', (req, res, next) => {
       details: `Transfer ${quantity} ${batch.unit} ${batch.reagentName} (LOT: ${batch.lotNumber}) dari ${sourceLocationName} ke ${destinationLocationName}`,
     });
 
-    db.save();
+    await db.save();
     res.json({ message: 'Stock transferred successfully', batch });
   });
 
   // 6. STOCK OPNAME
-  app.post('/api/stock-opnames', (req, res) => {
+  app.post('/api/stock-opnames', async (req, res) => {
     const data = db.get();
     const { title, locationId, locationName, userId, userName, items, notes } = req.body;
 
@@ -1518,12 +1652,12 @@ app.use('/api', (req, res, next) => {
       details: `Finalisasi Stock Opname ${sessionNumber} di ${locationName}. Total selisih: ${totalDifference} unit`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json(newSession);
   });
 
   // 7. PURCHASE ORDERS
-  app.post('/api/purchase-orders', (req, res) => {
+  app.post('/api/purchase-orders', async (req, res) => {
     const data = db.get();
     const { supplierId, supplierName, estimatedDeliveryDate, items, notes, userId, userName } = req.body;
 
@@ -1581,11 +1715,11 @@ app.use('/api', (req, res, next) => {
       details: `Membuat Purchase Order ${poNumber} ke ${supplierName} (Status: ${initialStatus}) senilai Rp ${total.toLocaleString('id-ID')}`,
     });
 
-    db.save();
+    await db.save();
     res.status(201).json(newPO);
   });
 
-  app.put('/api/purchase-orders/:id/submit', (req, res) => {
+  app.put('/api/purchase-orders/:id/submit', async (req, res) => {
     const data = db.get();
     const po = data.purchaseOrders.find((p) => p.id === req.params.id);
     if (!po) {
@@ -1618,11 +1752,11 @@ app.use('/api', (req, res, next) => {
       linkModule: 'purchase-orders',
     });
 
-    db.save();
+    await db.save();
     res.json(po);
   });
 
-  app.put('/api/purchase-orders/:id/approve', (req, res) => {
+  app.put('/api/purchase-orders/:id/approve', async (req, res) => {
     const data = db.get();
     const po = data.purchaseOrders.find((p) => p.id === req.params.id);
     if (!po) {
@@ -1650,11 +1784,11 @@ app.use('/api', (req, res, next) => {
       details: `Menyetujui Purchase Order ${po.poNumber} (${po.supplierName})`,
     });
 
-    db.save();
+    await db.save();
     res.json(po);
   });
 
-  app.put('/api/purchase-orders/:id', (req, res) => {
+  app.put('/api/purchase-orders/:id', async (req, res) => {
     const data = db.get();
     const index = data.purchaseOrders.findIndex((p) => p.id === req.params.id);
     if (index === -1) {
@@ -1666,11 +1800,11 @@ app.use('/api', (req, res, next) => {
       ...current,
       ...req.body,
     };
-    db.save();
+    await db.save();
     res.json(data.purchaseOrders[index]);
   });
 
-  app.delete('/api/purchase-orders/:id', (req, res) => {
+  app.delete('/api/purchase-orders/:id', async (req, res) => {
     const data = db.get();
     const index = data.purchaseOrders.findIndex((p) => p.id === req.params.id);
     if (index === -1) {
@@ -1689,7 +1823,7 @@ app.use('/api', (req, res, next) => {
       targetId: req.params.id,
       details: `Menghapus Purchase Order ${removed.poNumber}`,
     });
-    db.save();
+    await db.save();
     res.json({ success: true, id: req.params.id });
   });
 
@@ -1699,7 +1833,7 @@ app.use('/api', (req, res, next) => {
     res.json(data.letterhead || {});
   });
 
-  app.put('/api/letterhead', (req, res) => {
+  app.put('/api/letterhead', async (req, res) => {
     const data = db.get();
     data.letterhead = {
       ...(data.letterhead || {}),
@@ -1716,12 +1850,12 @@ app.use('/api', (req, res, next) => {
       targetId: 'KOP-01',
       details: 'Memperbarui konfigurasi Kop Surat & Penandatangan PO Rumah Sakit',
     });
-    db.save();
+    await db.save();
     res.json(data.letterhead);
   });
 
   // 9. NOTIFICATIONS MARK AS READ
-  app.post('/api/notifications/read', (req, res) => {
+  app.post('/api/notifications/read', async (req, res) => {
     const data = db.get();
     if (req.body.id) {
       const notif = data.notifications.find((n) => n.id === req.body.id);
@@ -1729,7 +1863,7 @@ app.use('/api', (req, res, next) => {
     } else {
       data.notifications.forEach((n) => (n.read = true));
     }
-    db.save();
+    await db.save();
     res.json({ success: true });
   });
 

@@ -23,3 +23,5 @@ coverage/
 .roo
 .trae
 .windsurf
+
+.env*

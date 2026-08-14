@@ -38,6 +38,7 @@ import {
   updateBatchApi,
   deleteBatchApi,
   stockInApi,
+  stockTransferApi,
   stockOutApi,
   createStockOpnameApi,
   createPOApi,
@@ -50,6 +51,11 @@ import {
   fetchAccountsApi,
   switchAccountApi,
   getPendingUsersApi,
+  createAccountApi,
+  deleteTransactionApi,
+  updateTransactionApi,
+  deleteStockOpnameApi,
+  updateStockOpnameApi,
 } from './lib/api.js';
 
 import { LoginPage } from './components/Auth/LoginPage.js';
@@ -63,6 +69,7 @@ import { ReagentMasterView } from './components/MasterData/ReagentMasterView.js'
 import { BatchMasterView } from './components/MasterData/BatchMasterView.js';
 import { ReagentInView } from './components/ReagentIn/ReagentInView.js';
 import { ReagentOutView } from './components/ReagentOut/ReagentOutView.js';
+import { TransferView } from './components/MasterData/TransferView.js';
 import { LocationView } from './components/MasterData/LocationView.js';
 import { SupplierView } from './components/MasterData/SupplierView.js';
 import { AnalyzerView } from './components/MasterData/AnalyzerView.js';
@@ -545,6 +552,11 @@ export default function App() {
     await loadData();
   };
 
+  const handleProcessTransfer = async (payload: any) => {
+    await stockTransferApi(payload);
+    await loadData();
+  };
+
   const handleCreateStockOpname = async (payload: any) => {
     await createStockOpnameApi(payload);
     await loadData();
@@ -792,6 +804,15 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'transfer' && canView('transfer') && (
+            <TransferView
+              batches={batches}
+              locations={locations}
+              currentRole={currentRole}
+              onProcessTransfer={handleProcessTransfer}
+            />
+          )}
+
           {activeTab === 'locations' && canView('locations') && (
             <LocationView
               locations={locations}
@@ -863,6 +884,8 @@ export default function App() {
               purchaseOrders={purchaseOrders}
               suppliers={suppliers}
               locations={locations}
+              currentRole={currentRole}
+              onDataChange={loadData}
             />
           )}
 

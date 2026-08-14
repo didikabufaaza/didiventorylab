@@ -105,6 +105,18 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
     setDeleteTargetBatch(null);
   };
 
+  const filteredBatches = batches.filter((b) => {
+    if (statusFilter !== 'all' && b.status !== statusFilter) return false;
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      (b.reagentName || '').toLowerCase().includes(q) ||
+      (b.lotNumber || '').toLowerCase().includes(q) ||
+      (b.barcode || '').toLowerCase().includes(q) ||
+      (b.locationName || '').toLowerCase().includes(q)
+    );
+  });
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -133,18 +145,6 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
   };
 
   const allSelected = filteredBatches.length > 0 && filteredBatches.every(b => selectedIds.has(b.id));
-
-  const filteredBatches = batches.filter((b) => {
-    if (statusFilter !== 'all' && b.status !== statusFilter) return false;
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      b.reagentName.toLowerCase().includes(q) ||
-      b.lotNumber.toLowerCase().includes(q) ||
-      b.barcode.toLowerCase().includes(q) ||
-      b.locationName.toLowerCase().includes(q)
-    );
-  });
 
   const handleOpenMarkOpened = (batch: ReagentBatch) => {
     setSelectedBatch(batch);

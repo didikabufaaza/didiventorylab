@@ -459,58 +459,64 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="mt-4 space-y-3">
-            {transactions.slice(0, 5).map((trx) => (
-              <div
-                key={trx.id}
-                className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 hover:bg-slate-100 transition"
-              >
-                <div className="flex items-center space-x-3">
-                  <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white shrink-0 ${
-                      trx.type === 'IN' ? 'bg-emerald-600' : 'bg-rose-600'
-                    }`}
-                  >
-                    {trx.type === 'IN' ? (
-                      <ArrowDownLeft className="h-5 w-5" />
-                    ) : (
-                      <ArrowUpRight className="h-5 w-5" />
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-xs text-slate-900">
-                        {trx.transactionNumber}
-                      </span>
-                      <span
-                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                          trx.type === 'IN'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}
-                      >
-                        {trx.type}
-                      </span>
+            {transactions.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-xl">
+                Belum ada transaksi IN / OUT yang tercatat.
+              </div>
+            ) : (
+              transactions.slice(0, 5).map((trx) => (
+                <div
+                  key={trx.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 hover:bg-slate-100 transition"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white shrink-0 ${
+                        trx.type === 'IN' ? 'bg-emerald-600' : 'bg-rose-600'
+                      }`}
+                    >
+                      {trx.type === 'IN' ? (
+                        <ArrowDownLeft className="h-5 w-5" />
+                      ) : (
+                        <ArrowUpRight className="h-5 w-5" />
+                      )}
                     </div>
 
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {trx.type === 'IN'
-                        ? `Dari ${trx.supplierName || 'Supplier'} | ${trx.items.length} Item`
-                        : `Ke ${trx.destinationUnit || 'Unit'} (${trx.purpose || '-'}) | ${
-                            trx.items.length
-                          } Item`}
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-xs text-slate-900">
+                          {trx.transactionNumber}
+                        </span>
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                            trx.type === 'IN'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {trx.type}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {trx.type === 'IN'
+                          ? `Dari ${trx.supplierName || 'Supplier'} | ${trx.items.length} Item`
+                          : `Ke ${trx.destinationUnit || 'Unit'} (${trx.purpose || '-'}) | ${
+                              trx.items.length
+                            } Item`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-xs text-slate-900">
+                      Rp {trx.totalAmount.toLocaleString('id-ID')}
                     </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{trx.date}</p>
                   </div>
                 </div>
-
-                <div className="text-right shrink-0">
-                  <p className="font-bold text-xs text-slate-900">
-                    Rp {trx.totalAmount.toLocaleString('id-ID')}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{trx.date}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

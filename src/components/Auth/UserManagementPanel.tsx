@@ -238,7 +238,7 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
     setBulkDeleteLoading(true);
     try {
       for (const id of Array.from(selectedUserIds)) {
-        await deleteUserApi(id).catch(() => {});
+        await deleteUserApi(id as string).catch(() => {});
       }
       setSelectedUserIds(new Set());
       await loadAll();
@@ -249,6 +249,27 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
       setBulkDeleteLoading(false);
     }
   };
+
+  const filteredUsers = users.filter((u) => {
+    const q = search.toLowerCase();
+    const tenant = tenantNameById(u.tenantId).toLowerCase();
+    return (
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q) ||
+      (u.role || '').toLowerCase().includes(q) ||
+      (u.unit || '').toLowerCase().includes(q) ||
+      tenant.includes(q)
+    );
+  });
+
+  const filteredPending = pendingUsers.filter((p) => {
+    const q = search.toLowerCase();
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.username || '').toLowerCase().includes(q) ||
+      (p.unit || '').toLowerCase().includes(q)
+    );
+  });
 
   const allSelected = filteredUsers.length > 0 && selectedUserIds.size === filteredUsers.length;
 
@@ -292,23 +313,6 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
     setEditError('');
   };
 
-  const filteredUsers = users.filter((u) => {
-    const q = search.toLowerCase();
-    const tenant = tenantNameById(u.tenantId).toLowerCase();
-    return (
-      u.name.toLowerCase().includes(q) ||
-      u.username.toLowerCase().includes(q) ||
-      u.role.toLowerCase().includes(q) ||
-      u.unit.toLowerCase().includes(q) ||
-      tenant.includes(q)
-    );
-  });
-
-  const filteredPending = pendingUsers.filter((p) => {
-    const q = search.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.username.toLowerCase().includes(q) || p.unit.toLowerCase().includes(q);
-  });
-
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -321,17 +325,12 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
           <p className="text-xs text-slate-500 mt-0.5">Kelola akun pengguna, peran, dan permohonan registrasi baru</p>
         </div>
         <div className="flex items-center space-x-2">
-          {/* Database Provider Status Badge Button */}
-          <button
-            type="button"
-            onClick={() => setIsDbModalOpen(true)}
-            className="flex items-center space-x-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100 transition shadow-xs"
-            title="Buka Pengaturan & Integrasi Database (Neon DB / Supabase / Postgres)"
-          >
-            <Database className="h-3.5 w-3.5 text-blue-600" />
-            <span>DB: {dbStatus?.providerLabel || 'Local JSON'}</span>
-            <span className={`inline-block w-2 h-2 rounded-full ${dbStatus?.ok ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-          </button>
+          {/* Database Provider Status Badge */}
+          <div className="flex items-center space-x-1.5 rounded-xl border border-indigo-200 bg-indigo-50/50 px-3 py-2 text-xs font-bold text-indigo-900 shadow-xs">
+            <Database className="h-3.5 w-3.5 text-indigo-600" />
+            <span>DB: InsForge PostgreSQL</span>
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
 
           <button
             type="button"
@@ -344,10 +343,6 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
           >
             <UserPlus className="h-3.5 w-3.5" />
             <span>Tambah Akun</span>
-          </button>
-          <button onClick={loadAll} className="flex items-center space-x-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
           </button>
         </div>
       </div>
@@ -949,145 +944,6 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Database Integration & Status Modal (Neon DB / Supabase / Postgres) */}
-      {isDbModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-fade-in">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-5 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
-                  <Database className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Integrasi Database Multi-Provider</h3>
-                  <p className="text-xs text-slate-500">Neon DB, Supabase, Insforge Dev, & PostgreSQL Generic</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsDbModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Current Active DB Card */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status Provider Aktif</span>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${dbStatus?.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  {dbStatus?.ok ? '● AKTIF & TERHUBUNG' : '● GAGAL / UNREACHABLE'}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-500 font-medium block">Provider Engine:</span>
-                  <span className="font-bold text-indigo-700 text-sm">{dbStatus?.providerLabel || 'Local JSON Storage'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-medium block">Koneksi Latensi:</span>
-                  <span className="font-mono font-bold text-slate-900">{dbStatus?.latencyMs || 0} ms</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-500 font-medium block">String Koneksi (Masked):</span>
-                  <span className="font-mono text-[11px] bg-white px-2 py-1 rounded border border-slate-200 text-slate-700 block truncate">
-                    {dbStatus?.connectionStringMasked || 'File: ./data/*.json'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-medium block">Jumlah Database Tenant:</span>
-                  <span className="font-bold text-slate-900">{dbStatus?.tenantCount || 0} Tenant</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-medium block">Jumlah Akun User:</span>
-                  <span className="font-bold text-slate-900">{dbStatus?.accountCount || 0} Akun</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Test Connection Input */}
-            <div className="space-y-2 border-t border-slate-100 pt-3">
-              <label className="block text-xs font-bold text-slate-800">
-                Uji Koneksi Connection String Baru (Neon DB / Supabase / Postgres)
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={testConnUrl}
-                  onChange={(e) => setTestConnUrl(e.target.value)}
-                  placeholder="postgresql://neondb_owner:password@ep-xxx.neon.tech/neondb?sslmode=require"
-                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono text-slate-900"
-                />
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={testConnLoading || !testConnUrl.trim()}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-60 shrink-0"
-                >
-                  {testConnLoading ? 'Menguji...' : 'Uji Koneksi'}
-                </button>
-              </div>
-
-              {testConnResult && (
-                <div className={`rounded-xl p-3 text-xs font-medium border ${testConnResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
-                  {testConnResult.ok ? (
-                    <div>
-                      <strong>✓ Koneksi Sukses!</strong> Engine detected: <strong>{testConnResult.providerLabel}</strong> ({testConnResult.latencyMs}ms).
-                    </div>
-                  ) : (
-                    <div>
-                      <strong>❌ Gagal Terhubung:</strong> {testConnResult.error || testConnResult.details}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 1-Click Migration Button */}
-            <div className="border-t border-slate-100 pt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Sinkronisasi & Migrasi Data</h4>
-                  <p className="text-[11px] text-slate-500">Salin seluruh data tenant & akun lokal ke database PostgreSQL aktif</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleMigrate}
-                  disabled={migrating}
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition disabled:opacity-60"
-                >
-                  {migrating ? 'Memigrasikan...' : 'Jalankan Migrasi'}
-                </button>
-              </div>
-
-              {migrateMsg && (
-                <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs font-medium text-blue-900">
-                  {migrateMsg}
-                </div>
-              )}
-            </div>
-
-            {/* Configuration Guide */}
-            <div className="rounded-xl bg-amber-50/70 border border-amber-200 p-3.5 text-xs text-amber-900 space-y-1.5">
-              <span className="font-bold block">💡 Panduan Integrasi Cepat `.env`:</span>
-              <p>1. Salin connection string dari <strong>Neon DB Dashboard</strong> atau <strong>Supabase Settings</strong>.</p>
-              <p>2. Buka file <code className="font-mono bg-amber-100 px-1 rounded">.env</code> di root project, lalu isi variable <code className="font-mono bg-amber-100 px-1 rounded">DATABASE_URL="..."</code>.</p>
-              <p>3. Restart server backend (<code className="font-mono bg-amber-100 px-1 rounded">npm run dev</code>). Sistem akan otomatis mendeteksi dan menggunakan PostgreSQL!</p>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsDbModalOpen(false)}
-                className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
-              >
-                Tutup
-              </button>
-            </div>
           </div>
         </div>
       )}
