@@ -48,9 +48,11 @@ export class PostgresAdapter implements IDatabaseAdapter {
         ssl: this.connectionString.includes('localhost') || this.connectionString.includes('127.0.0.1')
           ? false
           : { rejectUnauthorized: false },
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
+        max: 5,
+        min: 1,
+        idleTimeoutMillis: 60000,
+        connectionTimeoutMillis: 5000,
+        allowExitOnIdle: false,
       });
     }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cpu, Plus, Search, Edit2, Trash2, X, Activity, CheckCircle2, Tag } from 'lucide-react';
+import { Cpu, Plus, Search, Edit2, Trash2, X, Activity, Tag } from 'lucide-react';
 import { Analyzer, UserRole } from '../../types.js';
 
 interface AnalyzerViewProps {
@@ -17,12 +17,17 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
   onUpdateAnalyzer,
   onDeleteAnalyzer,
 }) => {
+  const canEdit = currentRole === 'Super Admin' || currentRole === 'Admin Inventory';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAnalyzer, setEditingAnalyzer] = useState<Analyzer | null>(null);
 
   // Custom Delete Modal state
   const [deleteTarget, setDeleteTarget] = useState<Analyzer | null>(null);
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState({
     name: '',
@@ -94,6 +99,19 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
     }
   };
 
+  // Checkbox helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const filteredAnalyzers = analyzers.filter((a) => {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
@@ -107,8 +125,27 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
     );
   });
 
+  const allSelected =
+    filteredAnalyzers.length > 0 && selectedIds.size === filteredAnalyzers.length;
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAnalyzers.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onDeleteAnalyzer || selectedIds.size === 0) return;
+    for (const id of selectedIds) {
+      await onDeleteAnalyzer(id);
+    }
+    setSelectedIds(new Set());
+  };
+
   return (
-    <div className="space-y-6 pb-12 animate-fade-in">
+    <div className="space-y-6 pb-24 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
@@ -117,7 +154,7 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
               <Cpu className="h-6 w-6" />
             </span>
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">Master Analyzer & Parameter Pemeriksaan</h2>
+              <h2 className="text-2xl font-bold text-slate-900">Master Analyzer &amp; Parameter Pemeriksaan</h2>
               <p className="text-xs text-slate-500">
                 Kelola instrumen/alat otomatisasi laboratorium, nomor seri, unit pelayanan, dan daftar parameter uji.
               </p>
@@ -125,44 +162,74 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center space-x-2 rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-teal-600/30 hover:bg-teal-700 transition shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Tambah Analyzer Baru</span>
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center space-x-2 rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-teal-600/30 hover:bg-teal-700 transition shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Tambah Analyzer Baru</span>
+          </button>
+        )}
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Cari analyzer, merk, parameter (e.g. Glucose, Hb)..."
-          className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:border-teal-500 focus:outline-none"
-        />
+      {/* Search Bar + Select All */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative max-w-md w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Cari analyzer, merk, parameter (e.g. Glucose, Hb)..."
+            className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+
+        {canEdit && filteredAnalyzers.length > 0 && (
+          <label className="flex items-center space-x-2 cursor-pointer select-none text-xs font-semibold text-slate-600 hover:text-teal-700 transition">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={handleSelectAll}
+              className="w-4 h-4 rounded accent-teal-600 cursor-pointer"
+            />
+            <span>{allSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}</span>
+          </label>
+        )}
       </div>
 
       {/* Grid List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredAnalyzers.length === 0 ? (
           <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
-            <p className="text-sm font-semibold">Tidak ada data Analyzer & Parameter ditemukan.</p>
+            <p className="text-sm font-semibold">Tidak ada data Analyzer &amp; Parameter ditemukan.</p>
           </div>
         ) : (
           filteredAnalyzers.map((a) => (
             <div
               key={a.id}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 hover:border-teal-300 transition flex flex-col justify-between"
+              className={`rounded-2xl border bg-white p-5 shadow-xs space-y-4 hover:border-teal-300 transition flex flex-col justify-between ${
+                selectedIds.has(a.id) ? 'border-teal-400 ring-2 ring-teal-200' : 'border-slate-200'
+              }`}
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
-                    {a.unit}
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    {/* Per-row checkbox */}
+                    {canEdit && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(a.id)}
+                        onChange={() => toggleSelect(a.id)}
+                        className="w-4 h-4 rounded accent-teal-600 cursor-pointer"
+                        title="Pilih analyzer ini"
+                      />
+                    )}
+                    <span className="font-mono text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
+                      {a.unit}
+                    </span>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -172,20 +239,24 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
                       {a.status}
                     </span>
                     <div className="flex items-center space-x-1">
-                      <button
-                        onClick={() => handleOpenEdit(a)}
-                        className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition"
-                        title="Edit Analyzer"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(a)}
-                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition"
-                        title="Hapus Analyzer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => handleOpenEdit(a)}
+                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition"
+                          title="Edit Analyzer"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                      )}
+                      {canEdit && onDeleteAnalyzer && (
+                        <button
+                          onClick={() => setDeleteTarget(a)}
+                          className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition"
+                          title="Hapus Analyzer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -232,6 +303,30 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
           ))
         )}
       </div>
+
+      {/* Bulk Delete Toolbar — fixed bottom */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between bg-rose-600 px-6 py-3 shadow-2xl">
+          <span className="text-sm font-bold text-white">
+            {selectedIds.size} analyzer terpilih
+          </span>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-xl border border-rose-300 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition"
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center space-x-1.5 rounded-xl bg-white px-4 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition shadow"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Hapus {selectedIds.size} analyzer terpilih</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Add / Edit Analyzer */}
       {isModalOpen && (

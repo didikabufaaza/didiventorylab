@@ -15,6 +15,7 @@ import {
   Package,
   Layers,
   Search,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   Reagent,
@@ -22,6 +23,7 @@ import {
   StorageLocation,
   UserRole,
 } from '../../types.js';
+import { SmartReagentInputModal } from '../MasterData/SmartReagentInputModal.js';
 
 interface StockInItemInput {
   reagentId: string;
@@ -44,6 +46,7 @@ interface ReagentInViewProps {
   currentRole: UserRole;
   onOpenBarcodeScanner: () => void;
   onProcessStockIn: (payload: any) => Promise<void>;
+  onCreateReagentsBatch?: (reagents: Partial<Reagent>[]) => Promise<void>;
   scannedBarcode?: string | null;
   clearScannedBarcode?: () => void;
 }
@@ -55,9 +58,12 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
   currentRole,
   onOpenBarcodeScanner,
   onProcessStockIn,
+  onCreateReagentsBatch,
   scannedBarcode,
   clearScannedBarcode,
 }) => {
+  const canEdit = currentRole === 'Super Admin' || currentRole === 'Admin Inventory';
+  const [isSmartInputOpen, setIsSmartInputOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id || 'sup-1');
   const [poNumber, setPoNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -79,6 +85,7 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   // Handle reagent selection auto fill
   const handleReagentChange = (rId: string) => {
@@ -136,6 +143,36 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
 
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+    setSelectedIndices(prev => {
+      const next = new Set<number>();
+      prev.forEach(val => {
+        if (val < index) next.add(val);
+        if (val > index) next.add(val - 1);
+      });
+      return next;
+    });
+  };
+
+  const handleBulkRemoveItems = () => {
+    if (selectedIndices.size === 0) return;
+    setItems(prev => prev.filter((_, i) => !selectedIndices.has(i)));
+    setSelectedIndices(new Set());
+  };
+
+  const toggleSelectIndex = (idx: number) => {
+    setSelectedIndices(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleSelectAllIndices = () => {
+    if (items.length > 0 && selectedIndices.size === items.length) {
+      setSelectedIndices(new Set());
+    } else {
+      setSelectedIndices(new Set(items.map((_, i) => i)));
+    }
   };
 
   const handleFinalSubmit = async () => {
@@ -167,6 +204,7 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
       await onProcessStockIn(payload);
       setSuccessMessage('Penerimaan Reagen Masuk (Stock IN) Berhasil Disimpan!');
       setItems([]);
+      setSelectedIndices(new Set());
       setPoNumber('');
       setInvoiceNumber('');
       setNotes('');
@@ -197,14 +235,37 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onOpenBarcodeScanner}
-          className="flex items-center justify-center space-x-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition shrink-0"
-        >
-          <Scan className="h-4 w-4" />
-          <span>Scan Barcode (HP/USB)</span>
-        </button>
+        <div className="flex items-center space-x-2 shrink-0">
+          {canEdit && onCreateReagentsBatch && (
+            <button
+              onClick={() => setIsSmartInputOpen(true)}
+              className="flex items-center space-x-2 rounded-lg bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+              <span>Smart Input Reagen</span>
+            </button>
+          )}
+          <button
+            onClick={onOpenBarcodeScanner}
+            className="flex items-center justify-center space-x-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition shrink-0"
+          >
+            <Scan className="h-4 w-4" />
+            <span>Scan Barcode (HP/USB)</span>
+          </button>
+        </div>
       </div>
+
+      {/* Smart Input Reagen Modal */}
+      {canEdit && onCreateReagentsBatch && (
+        <SmartReagentInputModal
+          isOpen={isSmartInputOpen}
+          onClose={() => setIsSmartInputOpen(false)}
+          onSave={async (imported) => {
+            await onCreateReagentsBatch(imported);
+            setIsSmartInputOpen(false);
+          }}
+        />
+      )}
 
       {/* Messages */}
       {errorMessage && (
@@ -473,10 +534,30 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between h-full">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h3 className="font-bold text-slate-900 text-base">Rincian Barang Diterima</h3>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                  {items.length} Item
-                </span>
+                <div className="flex items-center space-x-2">
+                  {items.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedIndices.size === items.length}
+                      onChange={toggleSelectAllIndices}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  )}
+                  <h3 className="font-bold text-slate-900 text-base">Rincian Barang Diterima</h3>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {selectedIndices.size > 0 && (
+                    <button
+                      onClick={handleBulkRemoveItems}
+                      className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-md hover:bg-rose-100 transition mr-2"
+                    >
+                      Hapus ({selectedIndices.size})
+                    </button>
+                  )}
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                    {items.length} Item
+                  </span>
+                </div>
               </div>
 
               {/* Items List */}
@@ -493,23 +574,33 @@ export const ReagentInView: React.FC<ReagentInViewProps> = ({
                   items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-2"
+                      className={`rounded-xl border p-3 flex items-center justify-between gap-2 transition ${
+                        selectedIndices.has(idx) ? 'bg-indigo-50/60 border-indigo-200' : 'bg-slate-50 border-slate-200'
+                      }`}
                     >
-                      <div className="min-w-0 flex-1">
-                        <h5 className="font-bold text-xs text-slate-900 truncate">
-                          {item.reagentName}
-                        </h5>
-                        <p className="text-[11px] text-slate-600 mt-0.5">
-                          LOT: <span className="font-semibold text-slate-900">{item.lotNumber}</span> | ED: {item.expiryDate}
-                        </p>
-                        <p className="text-[11px] text-indigo-800 font-bold">
-                          {item.quantity} {item.unit} &times; Rp {item.unitPrice.toLocaleString('id-ID')}
-                        </p>
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedIndices.has(idx)}
+                          onChange={() => toggleSelectIndex(idx)}
+                          className="w-4 h-4 rounded accent-indigo-600 cursor-pointer shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <h5 className="font-bold text-xs text-slate-900 truncate">
+                            {item.reagentName}
+                          </h5>
+                          <p className="text-[11px] text-slate-600 mt-0.5">
+                            LOT: <span className="font-semibold text-slate-900">{item.lotNumber}</span> | ED: {item.expiryDate}
+                          </p>
+                          <p className="text-[11px] text-indigo-800 font-bold">
+                            {item.quantity} {item.unit} &times; Rp {item.unitPrice.toLocaleString('id-ID')}
+                          </p>
+                        </div>
                       </div>
 
                       <button
                         onClick={() => handleRemoveItem(idx)}
-                        className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 transition"
+                        className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 transition shrink-0"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

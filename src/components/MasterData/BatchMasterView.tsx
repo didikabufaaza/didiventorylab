@@ -36,10 +36,13 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
   onUpdateBatch,
   onDeleteBatch,
 }) => {
+  const canEdit = currentRole === 'Super Admin' || currentRole === 'Admin Inventory';
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedBatch, setSelectedBatch] = useState<ReagentBatch | null>(null);
   const [openModalType, setOpenModalType] = useState<'opened' | 'quarantine' | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   // Form Inputs
   const [openedDateInput, setOpenedDateInput] = useState(new Date().toISOString().split('T')[0]);
@@ -101,6 +104,35 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
     await onDeleteBatch(deleteTargetBatch.id);
     setDeleteTargetBatch(null);
   };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (filteredBatches.every(b => selectedIds.has(b.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredBatches.map(b => b.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onDeleteBatch || selectedIds.size === 0) return;
+    if (!window.confirm(`Hapus ${selectedIds.size} batch/lot yang dipilih? Tindakan ini tidak bisa dibatalkan.`)) return;
+    setBulkDeleteLoading(true);
+    for (const id of Array.from(selectedIds)) {
+      await onDeleteBatch(id).catch(() => {});
+    }
+    setSelectedIds(new Set());
+    setBulkDeleteLoading(false);
+  };
+
+  const allSelected = filteredBatches.length > 0 && filteredBatches.every(b => selectedIds.has(b.id));
 
   const filteredBatches = batches.filter((b) => {
     if (statusFilter !== 'all' && b.status !== statusFilter) return false;
@@ -190,12 +222,44 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
 
       {/* Table */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        {/* Bulk Action Toolbar */}
+        {canEdit && selectedIds.size > 0 && (
+          <div className="flex items-center justify-between bg-rose-50 border-b border-rose-200 px-4 py-2.5">
+            <span className="text-xs font-bold text-rose-800">{selectedIds.size} lot/batch dipilih</span>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+              >
+                Batalkan Pilihan
+              </button>
+              <button
+                disabled={bulkDeleteLoading}
+                onClick={handleBulkDelete}
+                className="flex items-center space-x-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{bulkDeleteLoading ? 'Menghapus...' : `Hapus ${selectedIds.size} Lot/Batch`}</span>
+              </button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
               <tr>
+                {canEdit && (
+                  <th className="pl-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3">Nama Reagen</th>
-                <th className="px-4 py-3">Nomor Lot & Barcode</th>
+                <th className="px-4 py-3">Nomor Lot &amp; Barcode</th>
                 <th className="px-4 py-3">Stok Saat Ini</th>
                 <th className="px-4 py-3">Tanggal ED (Kemasan)</th>
                 <th className="px-4 py-3">Open Stability Status</th>
@@ -206,7 +270,17 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {filteredBatches.map((b) => (
-                <tr key={b.id} className="hover:bg-slate-50/80 transition">
+                <tr key={b.id} className={`hover:bg-slate-50/80 transition ${selectedIds.has(b.id) ? 'bg-indigo-50/60' : ''}`}>
+                  {canEdit && (
+                    <td className="pl-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(b.id)}
+                        onChange={() => toggleSelect(b.id)}
+                        className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 font-semibold text-slate-900">
                     {b.reagentName}
                     <span className="block text-[10px] text-slate-500 font-normal">
@@ -266,7 +340,7 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
                         Quarantine
                       </button>
                     )}
-                    {currentRole === 'Super Admin' && (
+                    {canEdit && (
                       <>
                         <button
                           onClick={() => handleOpenEditBatch(b)}
@@ -275,13 +349,15 @@ export const BatchMasterView: React.FC<BatchMasterViewProps> = ({
                           <Edit2 className="h-3 w-3" />
                           <span>Edit</span>
                         </button>
-                        <button
-                          onClick={() => setDeleteTargetBatch(b)}
-                          className="inline-flex items-center space-x-1.5 rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          <span>Hapus</span>
-                        </button>
+                        {onDeleteBatch && (
+                          <button
+                            onClick={() => setDeleteTargetBatch(b)}
+                            className="inline-flex items-center space-x-1.5 rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
                       </>
                     )}
                   </td>

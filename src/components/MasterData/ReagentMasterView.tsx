@@ -38,12 +38,15 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
   onUpdateReagent,
   onDeleteReagent,
 }) => {
+  const canEdit = currentRole === 'Super Admin' || currentRole === 'Admin Inventory';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSmartInputOpen, setIsSmartInputOpen] = useState(false);
   const [editingReagent, setEditingReagent] = useState<Reagent | null>(null);
   const [deleteTargetReagent, setDeleteTargetReagent] = useState<Reagent | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   // Barcode Scanner State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -182,6 +185,35 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (filteredReagents.every(r => selectedIds.has(r.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredReagents.map(r => r.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onDeleteReagent || selectedIds.size === 0) return;
+    if (!window.confirm(`Hapus ${selectedIds.size} reagen yang dipilih? Tindakan ini tidak bisa dibatalkan.`)) return;
+    setBulkDeleteLoading(true);
+    for (const id of Array.from(selectedIds)) {
+      await onDeleteReagent(id).catch(() => {});
+    }
+    setSelectedIds(new Set());
+    setBulkDeleteLoading(false);
+  };
+
+  const allSelected = filteredReagents.length > 0 && filteredReagents.every(r => selectedIds.has(r.id));
+
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
       {/* Scan Notice Alert */}
@@ -220,21 +252,25 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
             <span>Scan Barcode Kamera / HP</span>
           </button>
 
-          <button
-            onClick={() => setIsSmartInputOpen(true)}
-            className="flex items-center space-x-2 rounded-lg bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
-            <span>Smart Input Master Reagen</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setIsSmartInputOpen(true)}
+              className="flex items-center space-x-2 rounded-lg bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+              <span>Smart Input Master Reagen</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Tambah Reagen Baru</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Tambah Reagen Baru</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -270,10 +306,42 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
 
       {/* Table */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        {/* Bulk Action Toolbar */}
+        {canEdit && selectedIds.size > 0 && (
+          <div className="flex items-center justify-between bg-rose-50 border-b border-rose-200 px-4 py-2.5">
+            <span className="text-xs font-bold text-rose-800">{selectedIds.size} reagen dipilih</span>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+              >
+                Batalkan Pilihan
+              </button>
+              <button
+                disabled={bulkDeleteLoading}
+                onClick={handleBulkDelete}
+                className="flex items-center space-x-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{bulkDeleteLoading ? 'Menghapus...' : `Hapus ${selectedIds.size} Reagen`}</span>
+              </button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
               <tr>
+                {canEdit && (
+                  <th className="pl-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3">Kode & Barcode</th>
                 <th className="px-4 py-3">Nama Reagen</th>
                 <th className="px-4 py-3">Kategori</th>
@@ -294,7 +362,17 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
                     (b.status === 'Expired' || new Date(b.expiryDate) < new Date())
                 );
                 return (
-                  <tr key={r.id} className="hover:bg-slate-50/80 transition">
+                  <tr key={r.id} className={`hover:bg-slate-50/80 transition ${selectedIds.has(r.id) ? 'bg-indigo-50/60' : ''}`}>
+                    {canEdit && (
+                      <td className="pl-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                          className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-mono">
                       <span className="font-bold text-slate-900">{r.code}</span>
                       <span className="block text-[10px] text-slate-500">{r.barcode}</span>
@@ -321,8 +399,8 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
                     <div className="text-teal-700 text-[10px]">J: Rp {(r.sellingPrice || 0).toLocaleString('id-ID')}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-amber-700 font-bold">{r.minimumStock}</span> /{' '}
-                    <span className="text-blue-700 font-bold">{r.reorderPoint}</span> /{' '}
+                    <span className="text-amber-700 font-bold">{r.minimumStock}</span> {' '}
+                    <span className="text-blue-700 font-bold">{r.reorderPoint}</span> {' '}
                     <span className="text-slate-700">{r.maximumStock}</span> {r.unit}
                   </td>
                   <td className="px-4 py-3">
@@ -336,14 +414,16 @@ export const ReagentMasterView: React.FC<ReagentMasterViewProps> = ({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end space-x-1">
-                      <button
-                        onClick={() => handleOpenEdit(r)}
-                        className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200 transition"
-                        title="Edit Master Reagen"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      {onDeleteReagent && (
+                      {canEdit && (
+                        <button
+                          onClick={() => handleOpenEdit(r)}
+                          className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200 transition"
+                          title="Edit Master Reagen"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                      )}
+                      {canEdit && onDeleteReagent && (
                         <button
                           onClick={() => setDeleteTargetReagent(r)}
                           className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-100 transition"

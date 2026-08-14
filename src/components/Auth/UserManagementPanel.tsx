@@ -42,6 +42,8 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   // DB Adapter & Integration state
   const [dbStatus, setDbStatus] = useState<any>(null);
@@ -199,6 +201,11 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
     setDeleteLoading(true);
     try {
       await deleteUserApi(deleteTarget.id);
+      setSelectedUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(deleteTarget.id);
+        return next;
+      });
       setDeleteTarget(null);
       await loadAll();
       onDataChange?.();
@@ -208,6 +215,42 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
       setDeleteLoading(false);
     }
   };
+
+  const toggleSelectUser = (id: string) => {
+    setSelectedUserIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllUsers = () => {
+    if (filteredUsers.length > 0 && selectedUserIds.size === filteredUsers.length) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(filteredUsers.map(u => u.id)));
+    }
+  };
+
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUserIds.size === 0) return;
+    if (!window.confirm(`Hapus ${selectedUserIds.size} user yang dipilih? Tindakan ini tidak bisa dibatalkan.`)) return;
+    setBulkDeleteLoading(true);
+    try {
+      for (const id of Array.from(selectedUserIds)) {
+        await deleteUserApi(id).catch(() => {});
+      }
+      setSelectedUserIds(new Set());
+      await loadAll();
+      onDataChange?.();
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus beberapa user');
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
+  const allSelected = filteredUsers.length > 0 && selectedUserIds.size === filteredUsers.length;
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,9 +464,39 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
       {/* === ACTIVE USERS TAB === */}
       {tab === 'active' && (
         <div className="overflow-auto rounded-2xl border border-slate-200 bg-white">
+          {/* Bulk Action Toolbar */}
+          {selectedUserIds.size > 0 && (
+            <div className="flex items-center justify-between bg-rose-50 border-b border-rose-200 px-4 py-2.5">
+              <span className="text-xs font-bold text-rose-800">{selectedUserIds.size} user dipilih</span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setSelectedUserIds(new Set())}
+                  className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+                >
+                  Batalkan Pilihan
+                </button>
+                <button
+                  disabled={bulkDeleteLoading}
+                  onClick={handleBulkDeleteUsers}
+                  className="flex items-center space-x-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>{bulkDeleteLoading ? 'Menghapus...' : `Hapus ${selectedUserIds.size} User`}</span>
+                </button>
+              </div>
+            </div>
+          )}
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/80 border-b border-slate-200">
               <tr>
+                <th className="pl-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAllUsers}
+                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                  />
+                </th>
                 <th className="px-4 py-3 font-black text-slate-600 uppercase tracking-wider text-[10px]">Nama</th>
                 <th className="px-4 py-3 font-black text-slate-600 uppercase tracking-wider text-[10px]">Username</th>
                 <th className="px-4 py-3 font-black text-slate-600 uppercase tracking-wider text-[10px]">Database</th>
@@ -434,7 +507,15 @@ export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({ onData
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                <tr key={u.id} className={`hover:bg-slate-50/80 transition ${selectedUserIds.has(u.id) ? 'bg-indigo-50/60' : ''}`}>
+                  <td className="pl-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedUserIds.has(u.id)}
+                      onChange={() => toggleSelectUser(u.id)}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{u.name}</td>
                   <td className="px-4 py-3 font-mono text-slate-600">@{u.username}</td>
                   <td className="px-4 py-3 text-slate-600">

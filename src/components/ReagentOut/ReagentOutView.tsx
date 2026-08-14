@@ -57,6 +57,7 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
 
   // Available batches (active, quantity > 0, not expired)
   const availableBatches = batches.filter(
@@ -161,6 +162,33 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
 
   const handleRemoveItem = (batchId: string) => {
     setCart((prev) => prev.filter((item) => item.batch.id !== batchId));
+    setSelectedBatchIds(prev => {
+      const next = new Set(prev);
+      next.delete(batchId);
+      return next;
+    });
+  };
+
+  const handleBulkRemoveItems = () => {
+    if (selectedBatchIds.size === 0) return;
+    setCart(prev => prev.filter(item => !selectedBatchIds.has(item.batch.id)));
+    setSelectedBatchIds(new Set());
+  };
+
+  const toggleSelectBatch = (batchId: string) => {
+    setSelectedBatchIds(prev => {
+      const next = new Set(prev);
+      next.has(batchId) ? next.delete(batchId) : next.add(batchId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllCart = () => {
+    if (cart.length > 0 && selectedBatchIds.size === cart.length) {
+      setSelectedBatchIds(new Set());
+    } else {
+      setSelectedBatchIds(new Set(cart.map(item => item.batch.id)));
+    }
   };
 
   const handleProcessSubmit = async () => {
@@ -190,6 +218,7 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
       await onProcessStockOut(payload);
       setSuccessMessage('Pengeluaran Reagen (Stock OUT) Berhasil Diproses!');
       setCart([]);
+      setSelectedBatchIds(new Set());
       setNotes('');
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memproses transaksi OUT');
@@ -357,12 +386,29 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
               {/* Cart Header */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center space-x-2">
-                  <ShoppingCart className="h-5 w-5 text-indigo-600" />
+                  {cart.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={cart.length > 0 && selectedBatchIds.size === cart.length}
+                      onChange={toggleSelectAllCart}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  )}
                   <h3 className="font-semibold text-slate-900 text-base">Keranjang Pengeluaran</h3>
                 </div>
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-800">
-                  {totalCartItems} Item
-                </span>
+                <div className="flex items-center space-x-2">
+                  {selectedBatchIds.size > 0 && (
+                    <button
+                      onClick={handleBulkRemoveItems}
+                      className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-md hover:bg-rose-100 transition mr-2"
+                    >
+                      Hapus ({selectedBatchIds.size})
+                    </button>
+                  )}
+                  <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-800">
+                    {totalCartItems} Item
+                  </span>
+                </div>
               </div>
 
               {/* FEFO Warning Banner if any non-fefo item added */}
@@ -389,25 +435,35 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
                   cart.map((item) => (
                     <div
                       key={item.batch.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3"
+                      className={`rounded-xl border p-3 flex items-center justify-between gap-3 transition ${
+                        selectedBatchIds.has(item.batch.id) ? 'bg-indigo-50/60 border-indigo-200' : 'bg-slate-50 border-slate-200'
+                      }`}
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-1.5">
-                          <h5 className="font-bold text-xs text-slate-900 truncate">
-                            {item.reagent.name}
-                          </h5>
-                          {item.fefoWarning && (
-                            <span className="rounded bg-amber-200 px-1 text-[9px] font-extrabold text-amber-900">
-                              Non-FEFO
-                            </span>
-                          )}
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedBatchIds.has(item.batch.id)}
+                          onChange={() => toggleSelectBatch(item.batch.id)}
+                          className="w-4 h-4 rounded accent-indigo-600 cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <h5 className="font-bold text-xs text-slate-900 truncate">
+                              {item.reagent.name}
+                            </h5>
+                            {item.fefoWarning && (
+                              <span className="rounded bg-amber-200 px-1 text-[9px] font-extrabold text-amber-900">
+                                Non-FEFO
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            LOT: <span className="font-semibold text-slate-900">{item.batch.lotNumber}</span> | ED: {item.batch.expiryDate}
+                          </p>
+                          <p className="text-[11px] text-slate-700 font-medium">
+                            Rp {(item.batch.purchasePrice || 0).toLocaleString('id-ID')} / {item.batch.unit}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          LOT: <span className="font-semibold text-slate-800">{item.batch.lotNumber}</span> | ED: {item.batch.expiryDate}
-                        </p>
-                        <p className="text-[11px] text-slate-700 font-medium">
-                          Rp {(item.batch.purchasePrice || 0).toLocaleString('id-ID')} / {item.batch.unit}
-                        </p>
                       </div>
 
                       {/* Quantity Controls */}
@@ -432,7 +488,7 @@ export const ReagentOutView: React.FC<ReagentOutViewProps> = ({
 
                         <button
                           onClick={() => handleRemoveItem(item.batch.id)}
-                          className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 transition"
+                          className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 transition shrink-0"
                           title="Hapus item"
                         >
                           <Trash2 className="h-4 w-4" />

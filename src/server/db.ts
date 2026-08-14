@@ -852,7 +852,11 @@ const GLOBAL_ACCOUNTS_CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019fef00-b7
 let memoryAccountsState: AccountsState | null = null;
 let lastCloudSyncTime = 0;
 
-export async function syncCloudAccountsState(): Promise<AccountsState> {
+export async function syncCloudAccountsState(force = false): Promise<AccountsState> {
+  // TTL cache: skip DB roundtrip if data was synced within the last 3 seconds (unless forced)
+  if (!force && memoryAccountsState && (Date.now() - lastCloudSyncTime) < 3000) {
+    return memoryAccountsState;
+  }
   if (activeAdapter) {
     try {
       const adapterState = await activeAdapter.getAccounts();

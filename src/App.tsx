@@ -774,6 +774,7 @@ export default function App() {
               currentRole={currentRole}
               onOpenBarcodeScanner={() => setIsBarcodeModalOpen(true)}
               onProcessStockIn={handleProcessStockIn}
+              onCreateReagentsBatch={handleCreateReagentsBatch}
               scannedBarcode={scannedBarcode}
               clearScannedBarcode={() => setScannedBarcode(null)}
             />
