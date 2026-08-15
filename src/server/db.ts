@@ -1348,9 +1348,7 @@ export async function initDatabase(): Promise<IDatabaseAdapter> {
       }
 
       // Smart sync: reconcile local file data vs adapter data per tenant.
-      // If local has MORE data (e.g. 252 reagents) → push to adapter (auto-migrate).
-      // If adapter has data but local file is missing/stale → pull from adapter.
-      // This ensures both sources converge to the richest dataset.
+      // Database is always the source of truth if it has data.
       for (const t of tenants) {
         try {
           const adapterData = await activeAdapter.getTenantData(t.id);
@@ -1366,25 +1364,19 @@ export async function initDatabase(): Promise<IDatabaseAdapter> {
             }
           } catch { /* ignore parse errors */ }
 
-          const adapterCount = adapterData?.reagents?.length || 0;
-          const localCount = localData?.reagents?.length || 0;
+          // Check if adapter has database records (e.g. reagents)
+          const adapterHasData = adapterData && Array.isArray(adapterData.reagents) && adapterData.reagents.length > 0;
 
-          if (localCount > adapterCount) {
-            // Local is richer → push to adapter so InsForge matches app
-            if (localData) {
-              console.log(`[DB Init] Auto-sync UP tenant "${t.id}": local ${localCount} reagents → adapter (adapter had ${adapterCount})`);
-              await activeAdapter.saveTenantData(t.id, localData);
-            }
-          } else if (adapterCount > 0 && (!localData || localCount < adapterCount)) {
-            // Adapter is richer → pull to local file
-            console.log(`[DB Init] Auto-sync DOWN tenant "${t.id}": adapter ${adapterCount} reagents → local file (local had ${localCount})`);
+          if (adapterHasData) {
+            // Database is the source of truth → pull to local file
+            console.log(`[DB Init] Pulling tenant "${t.id}" from adapter to local file`);
             ensureDataDir();
             const dir = getTenantDir(t.id);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             writeJsonFile(getTenantFile(t.id), adapterData);
-          } else if (adapterCount === 0 && localCount === 0 && localData) {
-            // Both empty but file exists → push seed to adapter
-            console.log(`[DB Init] Seed push tenant "${t.id}" to adapter`);
+          } else if (localData) {
+            // Database is empty but local has seed data → seed adapter
+            console.log(`[DB Init] Seeding empty database for tenant "${t.id}" from local file`);
             await activeAdapter.saveTenantData(t.id, localData);
           }
         } catch (err) {

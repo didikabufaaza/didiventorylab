@@ -109,6 +109,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
           date VARCHAR(100),
           total_amount NUMERIC DEFAULT 0,
           user_name TEXT,
+          items JSONB,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
 
@@ -122,9 +123,137 @@ export class PostgresAdapter implements IDatabaseAdapter {
           tax NUMERIC DEFAULT 0,
           total NUMERIC DEFAULT 0,
           status VARCHAR(50),
+          items JSONB,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_suppliers (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          code VARCHAR(100),
+          name TEXT NOT NULL,
+          pic TEXT,
+          phone VARCHAR(100),
+          email VARCHAR(255),
+          address TEXT,
+          status VARCHAR(50),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_locations (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          code VARCHAR(100),
+          name TEXT NOT NULL,
+          building VARCHAR(255),
+          room VARCHAR(255),
+          type VARCHAR(100),
+          temperature_condition VARCHAR(100),
+          status VARCHAR(50),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_analyzers (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          name TEXT NOT NULL,
+          brand VARCHAR(100),
+          model VARCHAR(100),
+          serial_number VARCHAR(100),
+          unit VARCHAR(100),
+          parameters JSONB,
+          status VARCHAR(50),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_stock_movements (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          reagent_id VARCHAR(255),
+          reagent_name TEXT,
+          batch_id VARCHAR(255),
+          lot_number VARCHAR(100),
+          transaction_id VARCHAR(255),
+          transaction_number VARCHAR(100),
+          location_name TEXT,
+          movement_type VARCHAR(50),
+          quantity_in NUMERIC DEFAULT 0,
+          quantity_out NUMERIC DEFAULT 0,
+          balance_after NUMERIC DEFAULT 0,
+          created_at VARCHAR(100),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_stock_opnames (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          session_number VARCHAR(100),
+          title TEXT,
+          location_id VARCHAR(255),
+          location_name TEXT,
+          date VARCHAR(100),
+          status VARCHAR(50),
+          notes TEXT,
+          user_id VARCHAR(255),
+          user_name TEXT,
+          items JSONB,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_audit_logs (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          timestamp VARCHAR(100),
+          user_id VARCHAR(255),
+          user_name TEXT,
+          user_role VARCHAR(100),
+          action VARCHAR(255),
+          module VARCHAR(255),
+          target_id VARCHAR(255),
+          details TEXT,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_notifications (
+          id VARCHAR(255) PRIMARY KEY,
+          tenant_id VARCHAR(255) NOT NULL,
+          title TEXT,
+          message TEXT,
+          type VARCHAR(50),
+          severity VARCHAR(50),
+          timestamp VARCHAR(100),
+          read BOOLEAN DEFAULT FALSE,
+          link_module VARCHAR(100),
+          link_id VARCHAR(255),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS lrims_letterhead (
+          tenant_id VARCHAR(255) PRIMARY KEY,
+          pemda_name TEXT,
+          hospital_name TEXT,
+          hospital_address TEXT,
+          phone TEXT,
+          email TEXT,
+          logo_left_url TEXT,
+          logo_right_url TEXT,
+          signatory_1_title TEXT,
+          signatory_1_name TEXT,
+          signatory_1_nip TEXT,
+          signatory_2_title TEXT,
+          signatory_2_name TEXT,
+          signatory_2_nip TEXT,
+          signatory_3_title TEXT,
+          signatory_3_name TEXT,
+          signatory_3_nip TEXT,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
+      // Ensure transactions and purchase orders have the items JSONB column
+      await client.query('ALTER TABLE lrims_transactions ADD COLUMN IF NOT EXISTS items JSONB;');
+      await client.query('ALTER TABLE lrims_purchase_orders ADD COLUMN IF NOT EXISTS items JSONB;');
+      await client.query('ALTER TABLE lrims_notifications ADD COLUMN IF NOT EXISTS severity VARCHAR(50);');
 
       // Relational lrims_accounts: check if old JSONB format exists
       const acctTableCheck = await client.query(`
@@ -425,17 +554,191 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   async getTenantData(tenantId: string): Promise<DBData> {
+    const client = await this.pool.connect();
     try {
-      const res = await this.pool.query('SELECT payload FROM lrims_tenant_data WHERE tenant_id = $1', [tenantId]);
-      if (res.rows.length === 0) {
+      // Check if seeded (by querying letterhead)
+      const letterheadRes = await client.query('SELECT * FROM lrims_letterhead WHERE tenant_id = $1', [tenantId]);
+      if (letterheadRes.rows.length === 0) {
         const initial = seedTenantData();
+        client.release();
         await this.saveTenantData(tenantId, initial);
         return initial;
       }
-      return res.rows[0].payload as DBData;
+
+      const [
+        reagentsRes,
+        batchesRes,
+        transactionsRes,
+        purchaseOrdersRes,
+        suppliersRes,
+        locationsRes,
+        analyzersRes,
+        movementsRes,
+        opnamesRes,
+        logsRes,
+        notifsRes,
+      ] = await Promise.all([
+        client.query('SELECT * FROM lrims_reagents WHERE tenant_id = $1', [tenantId]),
+        client.query('SELECT * FROM lrims_batches WHERE tenant_id = $1', [tenantId]),
+        client.query('SELECT * FROM lrims_transactions WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
+        client.query('SELECT * FROM lrims_purchase_orders WHERE tenant_id = $1 ORDER BY order_date DESC, id DESC', [tenantId]),
+        client.query('SELECT * FROM lrims_suppliers WHERE tenant_id = $1', [tenantId]),
+        client.query('SELECT * FROM lrims_locations WHERE tenant_id = $1', [tenantId]),
+        client.query('SELECT * FROM lrims_analyzers WHERE tenant_id = $1', [tenantId]),
+        client.query('SELECT * FROM lrims_stock_movements WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
+        client.query('SELECT * FROM lrims_stock_opnames WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
+        client.query('SELECT * FROM lrims_audit_logs WHERE tenant_id = $1 ORDER BY timestamp DESC, id DESC LIMIT 500', [tenantId]),
+        client.query('SELECT * FROM lrims_notifications WHERE tenant_id = $1 ORDER BY timestamp DESC', [tenantId]),
+      ]);
+
+      const lh = letterheadRes.rows[0];
+
+      return {
+        users: [], // managed globally
+        pendingUsers: [], // managed globally
+        reagents: reagentsRes.rows.map((r: any) => ({
+          id: r.id,
+          code: r.code,
+          name: r.name,
+          brand: r.brand,
+          category: r.category,
+          unit: r.unit,
+          minimumStock: Number(r.min_stock || 0),
+          price: Number(r.purchase_price || 0),
+        })),
+        batches: batchesRes.rows.map((b: any) => ({
+          id: b.id,
+          reagentId: b.reagent_id,
+          reagentName: b.reagent_name,
+          lotNumber: b.lot_number,
+          barcode: b.barcode,
+          currentQuantity: Number(b.current_quantity || 0),
+          expiryDate: b.expiry_date,
+          status: b.status,
+        })),
+        transactions: transactionsRes.rows.map((t: any) => ({
+          id: t.id,
+          transactionNumber: t.transaction_number,
+          type: t.type,
+          date: t.date,
+          totalAmount: Number(t.total_amount || 0),
+          userName: t.user_name,
+          items: Array.isArray(t.items) ? t.items : (typeof t.items === 'string' ? JSON.parse(t.items) : []),
+        })),
+        purchaseOrders: purchaseOrdersRes.rows.map((po: any) => ({
+          id: po.id,
+          poNumber: po.po_number,
+          orderDate: po.order_date,
+          supplierName: po.supplier_name,
+          subtotal: Number(po.subtotal || 0),
+          tax: Number(po.tax || 0),
+          total: Number(po.total || 0),
+          status: po.status,
+          items: Array.isArray(po.items) ? po.items : (typeof po.items === 'string' ? JSON.parse(po.items) : []),
+        })),
+        suppliers: suppliersRes.rows.map((s: any) => ({
+          id: s.id,
+          code: s.code || '',
+          name: s.name,
+          pic: s.pic || '',
+          phone: s.phone || '',
+          email: s.email || '',
+          address: s.address || '',
+          status: s.status || 'Aktif',
+        })),
+        locations: locationsRes.rows.map((l: any) => ({
+          id: l.id,
+          code: l.code || '',
+          name: l.name,
+          building: l.building || '',
+          room: l.room || '',
+          type: l.type || 'Gudang',
+          temperatureCondition: l.temperature_condition || '',
+          status: l.status || 'Aktif',
+        })),
+        analyzers: analyzersRes.rows.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          brand: a.brand || '',
+          model: a.model || '',
+          serialNumber: a.serial_number || '',
+          unit: a.unit || '',
+          parameters: Array.isArray(a.parameters) ? a.parameters : (typeof a.parameters === 'string' ? JSON.parse(a.parameters) : []),
+          status: a.status || 'Aktif',
+        })),
+        stockMovements: movementsRes.rows.map((m: any) => ({
+          id: m.id,
+          reagentId: m.reagent_id || '',
+          reagentName: m.reagent_name || '',
+          batchId: m.batch_id || '',
+          lotNumber: m.lot_number || '',
+          transactionId: m.transaction_id || '',
+          transactionNumber: m.transaction_number || '',
+          locationName: m.location_name || '',
+          movementType: m.movement_type || 'IN',
+          quantityIn: Number(m.quantity_in || 0),
+          quantityOut: Number(m.quantity_out || 0),
+          balanceAfter: Number(m.balance_after || 0),
+          createdAt: m.created_at || '',
+        })),
+        stockOpnames: opnamesRes.rows.map((so: any) => ({
+          id: so.id,
+          sessionNumber: so.session_number,
+          title: so.title,
+          locationId: so.location_id,
+          locationName: so.location_name,
+          date: so.date,
+          status: so.status,
+          notes: so.notes,
+          userId: so.user_id,
+          userName: so.user_name,
+          items: Array.isArray(so.items) ? so.items : (typeof so.items === 'string' ? JSON.parse(so.items) : []),
+        })),
+        auditLogs: logsRes.rows.map((al: any) => ({
+          id: al.id,
+          timestamp: al.timestamp,
+          userId: al.user_id,
+          userName: al.user_name,
+          userRole: al.user_role,
+          action: al.action,
+          module: al.module,
+          targetId: al.target_id,
+          details: al.details,
+        })),
+        notifications: notifsRes.rows.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          severity: n.severity || 'info',
+          timestamp: n.timestamp,
+          read: Boolean(n.read),
+          linkModule: n.link_module,
+        })),
+        letterhead: {
+          pemdaName: lh.pemda_name || '',
+          hospitalName: lh.hospital_name || '',
+          hospitalAddress: lh.hospital_address || '',
+          phone: lh.phone || '',
+          email: lh.email || '',
+          logoLeftUrl: lh.logo_left_url || '',
+          logoRightUrl: lh.logo_right_url || '',
+          signatory1Title: lh.signatory_1_title || '',
+          signatory1Name: lh.signatory_1_name || '',
+          signatory1Nip: lh.signatory_1_nip || '',
+          signatory2Title: lh.signatory_2_title || '',
+          signatory2Name: lh.signatory_2_name || '',
+          signatory2Nip: lh.signatory_2_nip || '',
+          signatory3Title: lh.signatory_3_title || '',
+          signatory3Name: lh.signatory_3_name || '',
+          signatory3Nip: lh.signatory_3_nip || '',
+        },
+      };
     } catch (err) {
       console.error(`[PostgresAdapter] Error in getTenantData(${tenantId}), returning fallback:`, err);
       return seedTenantData();
+    } finally {
+      client.release();
     }
   }
 
@@ -443,13 +746,6 @@ export class PostgresAdapter implements IDatabaseAdapter {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      // Save Full JSON Payload into lrims_tenant_data
-      await client.query(
-        `INSERT INTO lrims_tenant_data (tenant_id, payload, updated_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (tenant_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-        [tenantId, JSON.stringify(data)]
-      );
 
       // Sync Master Reagents into lrims_reagents table (Bulk)
       if (Array.isArray(data.reagents)) {
@@ -517,14 +813,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const t of data.transactions) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6})`);
-            values.push(t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName);
-            index += 7;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7})`);
+            values.push(t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName, JSON.stringify(t.items || []));
+            index += 8;
           }
           await client.query(
-            `INSERT INTO lrims_transactions (id, tenant_id, transaction_number, type, date, total_amount, user_name, updated_at)
+            `INSERT INTO lrims_transactions (id, tenant_id, transaction_number, type, date, total_amount, user_name, items, updated_at)
              VALUES ${valueStrings.join(', ')}
-             ON CONFLICT (id) DO NOTHING`,
+             ON CONFLICT (id) DO UPDATE SET
+               transaction_number = EXCLUDED.transaction_number, type = EXCLUDED.type, date = EXCLUDED.date, total_amount = EXCLUDED.total_amount, user_name = EXCLUDED.user_name, items = EXCLUDED.items, updated_at = NOW()`,
             values
           );
           
@@ -545,15 +842,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const po of data.purchaseOrders) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, po.subtotal || 0, po.tax || 0, po.total || 0, po.status);
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, po.subtotal || 0, po.tax || 0, po.total || 0, po.status, JSON.stringify(po.items || []));
+            index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_purchase_orders (id, tenant_id, po_number, order_date, supplier_name, subtotal, tax, total, status, updated_at)
+            `INSERT INTO lrims_purchase_orders (id, tenant_id, po_number, order_date, supplier_name, subtotal, tax, total, status, items, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               status = EXCLUDED.status, subtotal = EXCLUDED.subtotal, tax = EXCLUDED.tax, total = EXCLUDED.total, updated_at = NOW()`,
+               status = EXCLUDED.status, subtotal = EXCLUDED.subtotal, tax = EXCLUDED.tax, total = EXCLUDED.total, items = EXCLUDED.items, updated_at = NOW()`,
             values
           );
           
@@ -565,6 +862,230 @@ export class PostgresAdapter implements IDatabaseAdapter {
         } else {
           await client.query('DELETE FROM lrims_purchase_orders WHERE tenant_id = $1', [tenantId]);
         }
+      }
+
+      // Sync Suppliers (Bulk)
+      if (Array.isArray(data.suppliers)) {
+        if (data.suppliers.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const s of data.suppliers) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(s.id, tenantId, s.code || '', s.name, s.pic || '', s.phone || '', s.email || '', s.address || '', s.status || 'Aktif');
+            index += 9;
+          }
+          await client.query(
+            `INSERT INTO lrims_suppliers (id, tenant_id, code, name, pic, phone, email, address, status, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               code = EXCLUDED.code, name = EXCLUDED.name, pic = EXCLUDED.pic, phone = EXCLUDED.phone, email = EXCLUDED.email, address = EXCLUDED.address, status = EXCLUDED.status, updated_at = NOW()`,
+            values
+          );
+          const supplierIds = data.suppliers.map(s => s.id);
+          await client.query(
+            `DELETE FROM lrims_suppliers WHERE tenant_id = $1 AND id NOT IN (${supplierIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...supplierIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_suppliers WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Locations (Bulk)
+      if (Array.isArray(data.locations)) {
+        if (data.locations.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const l of data.locations) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(l.id, tenantId, l.code || '', l.name, l.building || '', l.room || '', l.type || 'Gudang', l.temperatureCondition || '', l.status || 'Aktif');
+            index += 9;
+          }
+          await client.query(
+            `INSERT INTO lrims_locations (id, tenant_id, code, name, building, room, type, temperature_condition, status, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               code = EXCLUDED.code, name = EXCLUDED.name, building = EXCLUDED.building, room = EXCLUDED.room, type = EXCLUDED.type, temperature_condition = EXCLUDED.temperature_condition, status = EXCLUDED.status, updated_at = NOW()`,
+            values
+          );
+          const locationIds = data.locations.map(l => l.id);
+          await client.query(
+            `DELETE FROM lrims_locations WHERE tenant_id = $1 AND id NOT IN (${locationIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...locationIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_locations WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Analyzers (Bulk)
+      if (Array.isArray(data.analyzers)) {
+        if (data.analyzers.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const a of data.analyzers) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(a.id, tenantId, a.name, a.brand || '', a.model || '', a.serialNumber || '', a.unit || '', JSON.stringify(a.parameters || []), a.status || 'Aktif');
+            index += 9;
+          }
+          await client.query(
+            `INSERT INTO lrims_analyzers (id, tenant_id, name, brand, model, serial_number, unit, parameters, status, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               name = EXCLUDED.name, brand = EXCLUDED.brand, model = EXCLUDED.model, serial_number = EXCLUDED.serial_number, unit = EXCLUDED.unit, parameters = EXCLUDED.parameters, status = EXCLUDED.status, updated_at = NOW()`,
+            values
+          );
+          const analyzerIds = data.analyzers.map(a => a.id);
+          await client.query(
+            `DELETE FROM lrims_analyzers WHERE tenant_id = $1 AND id NOT IN (${analyzerIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...analyzerIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_analyzers WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Stock Movements (Bulk)
+      if (Array.isArray(data.stockMovements)) {
+        if (data.stockMovements.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const m of data.stockMovements) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11}, $${index + 12}, $${index + 13}, $${index + 14})`);
+            values.push(
+              m.id, tenantId, m.reagentId || '', m.reagentName || '', m.batchId || '', m.lotNumber || '',
+              m.transactionId || '', m.transactionNumber || '', m.locationName || '', m.movementType || 'IN',
+              m.quantityIn || 0, m.quantityOut || 0, m.balanceAfter || 0, m.createdAt || ''
+            );
+            index += 14;
+          }
+          await client.query(
+            `INSERT INTO lrims_stock_movements (id, tenant_id, reagent_id, reagent_name, batch_id, lot_number, transaction_id, transaction_number, location_name, movement_type, quantity_in, quantity_out, balance_after, created_at, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               reagent_id = EXCLUDED.reagent_id, reagent_name = EXCLUDED.reagent_name, batch_id = EXCLUDED.batch_id, lot_number = EXCLUDED.lot_number,
+               transaction_id = EXCLUDED.transaction_id, transaction_number = EXCLUDED.transaction_number, location_name = EXCLUDED.location_name,
+               movement_type = EXCLUDED.movement_type, quantity_in = EXCLUDED.quantity_in, quantity_out = EXCLUDED.quantity_out, balance_after = EXCLUDED.balance_after, created_at = EXCLUDED.created_at, updated_at = NOW()`,
+            values
+          );
+          const smIds = data.stockMovements.map(m => m.id);
+          await client.query(
+            `DELETE FROM lrims_stock_movements WHERE tenant_id = $1 AND id NOT IN (${smIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...smIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_stock_movements WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Stock Opnames (Bulk)
+      if (Array.isArray(data.stockOpnames)) {
+        if (data.stockOpnames.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const so of data.stockOpnames) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11})`);
+            values.push(so.id, tenantId, so.sessionNumber || null, so.title || null, so.locationId || null, so.locationName || null, so.date || null, so.status || null, so.notes || null, so.userId || null, so.userName || null, JSON.stringify(so.items || []));
+            index += 12;
+          }
+          await client.query(
+            `INSERT INTO lrims_stock_opnames (id, tenant_id, session_number, title, location_id, location_name, date, status, notes, user_id, user_name, items, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               session_number = EXCLUDED.session_number, title = EXCLUDED.title, location_id = EXCLUDED.location_id, location_name = EXCLUDED.location_name, date = EXCLUDED.date, status = EXCLUDED.status, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, items = EXCLUDED.items, updated_at = NOW()`,
+            values
+          );
+          const opnameIds = data.stockOpnames.map(so => so.id);
+          await client.query(
+            `DELETE FROM lrims_stock_opnames WHERE tenant_id = $1 AND id NOT IN (${opnameIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...opnameIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_stock_opnames WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Audit Logs (Bulk)
+      if (Array.isArray(data.auditLogs)) {
+        if (data.auditLogs.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const al of data.auditLogs) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(al.id, tenantId, al.timestamp || null, al.userId || null, al.userName || null, al.userRole || null, al.action || null, al.module || null, al.targetId || null, al.details || null);
+            index += 10;
+          }
+          await client.query(
+            `INSERT INTO lrims_audit_logs (id, tenant_id, timestamp, user_id, user_name, user_role, action, module, target_id, details, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO NOTHING`,
+            values
+          );
+          const logIds = data.auditLogs.map(al => al.id);
+          await client.query(
+            `DELETE FROM lrims_audit_logs WHERE tenant_id = $1 AND id NOT IN (${logIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...logIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_audit_logs WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Notifications (Bulk)
+      if (Array.isArray(data.notifications)) {
+        if (data.notifications.length > 0) {
+          const values: any[] = [];
+          const valueStrings: string[] = [];
+          let index = 1;
+          for (const n of data.notifications) {
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(n.id, tenantId, n.title || null, n.message || null, n.type || null, n.severity || 'info', n.timestamp || null, n.read || false, n.linkModule || null, null);
+            index += 10;
+          }
+          await client.query(
+            `INSERT INTO lrims_notifications (id, tenant_id, title, message, type, severity, timestamp, read, link_module, link_id, updated_at)
+             VALUES ${valueStrings.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               title = EXCLUDED.title, message = EXCLUDED.message, type = EXCLUDED.type, severity = EXCLUDED.severity, timestamp = EXCLUDED.timestamp, read = EXCLUDED.read, link_module = EXCLUDED.link_module, link_id = EXCLUDED.link_id, updated_at = NOW()`,
+            values
+          );
+          const notifIds = data.notifications.map(n => n.id);
+          await client.query(
+            `DELETE FROM lrims_notifications WHERE tenant_id = $1 AND id NOT IN (${notifIds.map((_, i) => `$${i + 2}`).join(',')})`,
+            [tenantId, ...notifIds]
+          );
+        } else {
+          await client.query('DELETE FROM lrims_notifications WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
+      // Sync Letterhead Config
+      if (data.letterhead) {
+        const lh = data.letterhead;
+        await client.query(
+          `INSERT INTO lrims_letterhead (
+            tenant_id, pemda_name, hospital_name, hospital_address, phone, email,
+            logo_left_url, logo_right_url, signatory_1_title, signatory_1_name, signatory_1_nip,
+            signatory_2_title, signatory_2_name, signatory_2_nip, signatory_3_title, signatory_3_name, signatory_3_nip, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+          ON CONFLICT (tenant_id) DO UPDATE SET
+            pemda_name = EXCLUDED.pemda_name, hospital_name = EXCLUDED.hospital_name, hospital_address = EXCLUDED.hospital_address,
+            phone = EXCLUDED.phone, email = EXCLUDED.email, logo_left_url = EXCLUDED.logo_left_url, logo_right_url = EXCLUDED.logo_right_url,
+            signatory_1_title = EXCLUDED.signatory_1_title, signatory_1_name = EXCLUDED.signatory_1_name, signatory_1_nip = EXCLUDED.signatory_1_nip,
+            signatory_2_title = EXCLUDED.signatory_2_title, signatory_2_name = EXCLUDED.signatory_2_name, signatory_2_nip = EXCLUDED.signatory_2_nip,
+            signatory_3_title = EXCLUDED.signatory_3_title, signatory_3_name = EXCLUDED.signatory_3_name, signatory_3_nip = EXCLUDED.signatory_3_nip, updated_at = NOW()`,
+          [
+            tenantId, lh.pemdaName, lh.hospitalName, lh.hospitalAddress, lh.phone, lh.email,
+            lh.logoLeftUrl, lh.logoRightUrl, lh.signatory1Title, lh.signatory1Name, lh.signatory1Nip,
+            lh.signatory2Title, lh.signatory2Name, lh.signatory2Nip, lh.signatory3Title, lh.signatory3Name, lh.signatory3Nip
+          ]
+        );
       }
 
       await client.query('COMMIT');
