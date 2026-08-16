@@ -48,7 +48,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
         ssl: this.connectionString.includes('localhost') || this.connectionString.includes('127.0.0.1')
           ? false
           : { rejectUnauthorized: false },
-        max: 2,
+        max: 10,
         min: 0,
         idleTimeoutMillis: 10000,
         connectionTimeoutMillis: 5000,
@@ -402,6 +402,32 @@ export class PostgresAdapter implements IDatabaseAdapter {
           }
         }
       }
+
+      // Ensure payload JSONB column exists on all 11 tables
+      const tables = [
+        'lrims_reagents',
+        'lrims_batches',
+        'lrims_transactions',
+        'lrims_purchase_orders',
+        'lrims_suppliers',
+        'lrims_locations',
+        'lrims_analyzers',
+        'lrims_stock_movements',
+        'lrims_stock_opnames',
+        'lrims_audit_logs',
+        'lrims_notifications'
+      ];
+      for (const table of tables) {
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS payload JSONB;`);
+      }
+
+      // Ensure specific missing columns in lrims_purchase_orders exist
+      await client.query(`
+        ALTER TABLE lrims_purchase_orders ADD COLUMN IF NOT EXISTS supplier_id VARCHAR(255);
+        ALTER TABLE lrims_purchase_orders ADD COLUMN IF NOT EXISTS estimated_delivery_date VARCHAR(100);
+        ALTER TABLE lrims_purchase_orders ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE lrims_purchase_orders ADD COLUMN IF NOT EXISTS created_at VARCHAR(100);
+      `);
     } finally {
       client.release();
     }
@@ -451,40 +477,44 @@ export class PostgresAdapter implements IDatabaseAdapter {
 
   async getAccounts(): Promise<{ accounts: User[]; pendingUsers: PendingUser[] }> {
     try {
-      const activeRes = await this.pool.query(
-        "SELECT id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at FROM lrims_accounts WHERE account_type = 'active' ORDER BY created_at ASC"
+      const res = await this.pool.query(
+        "SELECT id, name, username, password, email, role, unit, status, tenant_id, tenant_name, created_by, created_at, requested_role, registered_at, message, account_type FROM lrims_accounts ORDER BY created_at ASC, registered_at ASC"
       );
-      const pendingRes = await this.pool.query(
-        "SELECT id, name, username, password, email, unit, requested_role, registered_at, tenant_id, message FROM lrims_accounts WHERE account_type = 'pending' ORDER BY registered_at ASC"
-      );
-
-      const accounts: User[] = activeRes.rows.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        username: r.username,
-        password: r.password,
-        email: r.email,
-        role: r.role,
-        unit: r.unit,
-        status: r.status,
-        tenantId: r.tenant_id || undefined,
-        tenantName: r.tenant_name || undefined,
-        createdBy: r.created_by || undefined,
-        createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
-      }));
-
-      const pendingUsers: PendingUser[] = pendingRes.rows.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        username: r.username,
-        password: r.password,
-        email: r.email,
-        unit: r.unit,
-        requestedRole: r.requested_role,
-        registeredAt: r.registered_at ? new Date(r.registered_at).toISOString() : new Date().toISOString(),
-        tenantId: r.tenant_id || undefined,
-        message: r.message || undefined,
-      }));
+      
+      const accounts: User[] = [];
+      const pendingUsers: PendingUser[] = [];
+      
+      for (const r of res.rows) {
+        if (r.account_type === 'active') {
+          accounts.push({
+            id: r.id,
+            name: r.name,
+            username: r.username,
+            password: r.password,
+            email: r.email,
+            role: r.role,
+            unit: r.unit,
+            status: r.status,
+            tenantId: r.tenant_id || undefined,
+            tenantName: r.tenant_name || undefined,
+            createdBy: r.created_by || undefined,
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+          });
+        } else if (r.account_type === 'pending') {
+          pendingUsers.push({
+            id: r.id,
+            name: r.name,
+            username: r.username,
+            password: r.password,
+            email: r.email,
+            unit: r.unit,
+            requestedRole: r.requested_role,
+            registeredAt: r.registered_at ? new Date(r.registered_at).toISOString() : new Date().toISOString(),
+            tenantId: r.tenant_id || undefined,
+            message: r.message || undefined,
+          });
+        }
+      }
 
       if (accounts.length === 0) {
         return { accounts: DEFAULT_ACCOUNTS, pendingUsers: [] };
@@ -556,165 +586,191 @@ export class PostgresAdapter implements IDatabaseAdapter {
   async getTenantData(tenantId: string): Promise<DBData> {
     const client = await this.pool.connect();
     try {
-      // Check if seeded (by querying letterhead)
-      const letterheadRes = await client.query('SELECT * FROM lrims_letterhead WHERE tenant_id = $1', [tenantId]);
-      if (letterheadRes.rows.length === 0) {
+      const unifiedQuery = `
+        SELECT 
+          (SELECT COALESCE(json_agg(r), '[]'::json) FROM lrims_reagents r WHERE r.tenant_id = $1) as reagents,
+          (SELECT COALESCE(json_agg(b), '[]'::json) FROM lrims_batches b WHERE b.tenant_id = $1) as batches,
+          (SELECT COALESCE(json_agg(t), '[]'::json) FROM (SELECT * FROM lrims_transactions WHERE tenant_id = $1 ORDER BY date DESC, id DESC) t) as transactions,
+          (SELECT COALESCE(json_agg(po), '[]'::json) FROM (SELECT * FROM lrims_purchase_orders WHERE tenant_id = $1 ORDER BY order_date DESC, id DESC) po) as purchase_orders,
+          (SELECT COALESCE(json_agg(s), '[]'::json) FROM lrims_suppliers s WHERE s.tenant_id = $1) as suppliers,
+          (SELECT COALESCE(json_agg(l), '[]'::json) FROM lrims_locations l WHERE l.tenant_id = $1) as locations,
+          (SELECT COALESCE(json_agg(a), '[]'::json) FROM lrims_analyzers a WHERE a.tenant_id = $1) as analyzers,
+          (SELECT COALESCE(json_agg(sm), '[]'::json) FROM (SELECT * FROM lrims_stock_movements WHERE tenant_id = $1 ORDER BY date DESC, id DESC) sm) as stock_movements,
+          (SELECT COALESCE(json_agg(so), '[]'::json) FROM (SELECT * FROM lrims_stock_opnames WHERE tenant_id = $1 ORDER BY date DESC, id DESC) so) as stock_opnames,
+          (SELECT COALESCE(json_agg(al), '[]'::json) FROM (SELECT * FROM lrims_audit_logs WHERE tenant_id = $1 ORDER BY timestamp DESC, id DESC LIMIT 500) al) as audit_logs,
+          (SELECT COALESCE(json_agg(n), '[]'::json) FROM (SELECT * FROM lrims_notifications WHERE tenant_id = $1 ORDER BY timestamp DESC) n) as notifications,
+          (SELECT to_jsonb(lh) FROM lrims_letterhead lh WHERE lh.tenant_id = $1) as letterhead
+      `;
+
+      const res = await client.query(unifiedQuery, [tenantId]);
+      const row = res.rows[0];
+
+      // If not seeded (letterhead is missing/null)
+      if (!row || !row.letterhead) {
         const initial = seedTenantData();
         client.release();
         await this.saveTenantData(tenantId, initial);
         return initial;
       }
 
-      const [
-        reagentsRes,
-        batchesRes,
-        transactionsRes,
-        purchaseOrdersRes,
-        suppliersRes,
-        locationsRes,
-        analyzersRes,
-        movementsRes,
-        opnamesRes,
-        logsRes,
-        notifsRes,
-      ] = await Promise.all([
-        client.query('SELECT * FROM lrims_reagents WHERE tenant_id = $1', [tenantId]),
-        client.query('SELECT * FROM lrims_batches WHERE tenant_id = $1', [tenantId]),
-        client.query('SELECT * FROM lrims_transactions WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
-        client.query('SELECT * FROM lrims_purchase_orders WHERE tenant_id = $1 ORDER BY order_date DESC, id DESC', [tenantId]),
-        client.query('SELECT * FROM lrims_suppliers WHERE tenant_id = $1', [tenantId]),
-        client.query('SELECT * FROM lrims_locations WHERE tenant_id = $1', [tenantId]),
-        client.query('SELECT * FROM lrims_analyzers WHERE tenant_id = $1', [tenantId]),
-        client.query('SELECT * FROM lrims_stock_movements WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
-        client.query('SELECT * FROM lrims_stock_opnames WHERE tenant_id = $1 ORDER BY date DESC, id DESC', [tenantId]),
-        client.query('SELECT * FROM lrims_audit_logs WHERE tenant_id = $1 ORDER BY timestamp DESC, id DESC LIMIT 500', [tenantId]),
-        client.query('SELECT * FROM lrims_notifications WHERE tenant_id = $1 ORDER BY timestamp DESC', [tenantId]),
-      ]);
+      // Helper function to parse payload or fallback to column mapping
+      const parseRow = (r: any, fallbackMapping: () => any) => {
+        if (r && r.payload) {
+          return typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
+        }
+        return fallbackMapping();
+      };
 
-      const lh = letterheadRes.rows[0];
+      const reagents = (row.reagents || []).map((r: any) => parseRow(r, () => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        brand: r.brand,
+        category: r.category,
+        unit: r.unit,
+        minimumStock: Number(r.min_stock || 0),
+        price: Number(r.purchase_price || 0),
+      })));
+
+      const batches = (row.batches || []).map((b: any) => parseRow(b, () => ({
+        id: b.id,
+        reagentId: b.reagent_id,
+        reagentName: b.reagent_name,
+        lotNumber: b.lot_number,
+        barcode: b.barcode,
+        currentQuantity: Number(b.current_quantity || 0),
+        expiryDate: b.expiry_date,
+        status: b.status,
+      })));
+
+      const transactions = (row.transactions || []).map((t: any) => parseRow(t, () => ({
+        id: t.id,
+        transactionNumber: t.transaction_number,
+        type: t.type,
+        date: t.date,
+        totalAmount: Number(t.total_amount || 0),
+        userName: t.user_name,
+        items: Array.isArray(t.items) ? t.items : (typeof t.items === 'string' ? JSON.parse(t.items) : []),
+      })));
+
+      const purchaseOrders = (row.purchase_orders || []).map((po: any) => parseRow(po, () => ({
+        id: po.id,
+        poNumber: po.po_number,
+        orderDate: po.order_date,
+        supplierName: po.supplier_name,
+        subtotal: Number(po.subtotal || 0),
+        tax: Number(po.tax || 0),
+        total: Number(po.total || 0),
+        status: po.status,
+        items: Array.isArray(po.items) ? po.items : (typeof po.items === 'string' ? JSON.parse(po.items) : []),
+        supplierId: po.supplier_id || undefined,
+        estimatedDeliveryDate: po.estimated_delivery_date || undefined,
+        notes: po.notes || undefined,
+        createdAt: po.created_at || undefined,
+      })));
+
+      const suppliers = (row.suppliers || []).map((s: any) => parseRow(s, () => ({
+        id: s.id,
+        code: s.code || '',
+        name: s.name,
+        pic: s.pic || '',
+        phone: s.phone || '',
+        email: s.email || '',
+        address: s.address || '',
+        status: s.status || 'Aktif',
+      })));
+
+      const locations = (row.locations || []).map((l: any) => parseRow(l, () => ({
+        id: l.id,
+        code: l.code || '',
+        name: l.name,
+        building: l.building || '',
+        room: l.room || '',
+        type: l.type || 'Gudang',
+        temperatureCondition: l.temperature_condition || '',
+        status: l.status || 'Aktif',
+      })));
+
+      const analyzers = (row.analyzers || []).map((a: any) => parseRow(a, () => ({
+        id: a.id,
+        name: a.name,
+        brand: a.brand || '',
+        model: a.model || '',
+        serialNumber: a.serial_number || '',
+        unit: a.unit || '',
+        parameters: Array.isArray(a.parameters) ? a.parameters : (typeof a.parameters === 'string' ? JSON.parse(a.parameters) : []),
+        status: a.status || 'Aktif',
+      })));
+
+      const stockMovements = (row.stock_movements || []).map((m: any) => parseRow(m, () => ({
+        id: m.id,
+        reagentId: m.reagent_id || '',
+        reagentName: m.reagent_name || '',
+        batchId: m.batch_id || '',
+        lotNumber: m.lot_number || '',
+        transactionId: m.transaction_id || '',
+        transactionNumber: m.transaction_number || '',
+        locationName: m.location_name || '',
+        movementType: m.movement_type || 'IN',
+        quantityIn: Number(m.quantity_in || 0),
+        quantityOut: Number(m.quantity_out || 0),
+        balanceAfter: Number(m.balance_after || 0),
+        createdAt: m.created_at || '',
+      })));
+
+      const stockOpnames = (row.stock_opnames || []).map((so: any) => parseRow(so, () => ({
+        id: so.id,
+        sessionNumber: so.session_number,
+        title: so.title,
+        locationId: so.location_id,
+        locationName: so.location_name,
+        date: so.date,
+        status: so.status,
+        notes: so.notes,
+        userId: so.user_id,
+        userName: so.user_name,
+        items: Array.isArray(so.items) ? so.items : (typeof so.items === 'string' ? JSON.parse(so.items) : []),
+      })));
+
+      const auditLogs = (row.audit_logs || []).map((al: any) => parseRow(al, () => ({
+        id: al.id,
+        timestamp: al.timestamp,
+        userId: al.user_id,
+        userName: al.user_name,
+        userRole: al.user_role,
+        action: al.action,
+        module: al.module,
+        targetId: al.target_id,
+        details: al.details,
+      })));
+
+      const notifications = (row.notifications || []).map((n: any) => parseRow(n, () => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        severity: n.severity || 'info',
+        timestamp: n.timestamp,
+        read: Boolean(n.read),
+        linkModule: n.link_module,
+      })));
+
+      const lh = row.letterhead || {};
 
       return {
         users: [], // managed globally
         pendingUsers: [], // managed globally
-        reagents: reagentsRes.rows.map((r: any) => ({
-          id: r.id,
-          code: r.code,
-          name: r.name,
-          brand: r.brand,
-          category: r.category,
-          unit: r.unit,
-          minimumStock: Number(r.min_stock || 0),
-          price: Number(r.purchase_price || 0),
-        })),
-        batches: batchesRes.rows.map((b: any) => ({
-          id: b.id,
-          reagentId: b.reagent_id,
-          reagentName: b.reagent_name,
-          lotNumber: b.lot_number,
-          barcode: b.barcode,
-          currentQuantity: Number(b.current_quantity || 0),
-          expiryDate: b.expiry_date,
-          status: b.status,
-        })),
-        transactions: transactionsRes.rows.map((t: any) => ({
-          id: t.id,
-          transactionNumber: t.transaction_number,
-          type: t.type,
-          date: t.date,
-          totalAmount: Number(t.total_amount || 0),
-          userName: t.user_name,
-          items: Array.isArray(t.items) ? t.items : (typeof t.items === 'string' ? JSON.parse(t.items) : []),
-        })),
-        purchaseOrders: purchaseOrdersRes.rows.map((po: any) => ({
-          id: po.id,
-          poNumber: po.po_number,
-          orderDate: po.order_date,
-          supplierName: po.supplier_name,
-          subtotal: Number(po.subtotal || 0),
-          tax: Number(po.tax || 0),
-          total: Number(po.total || 0),
-          status: po.status,
-          items: Array.isArray(po.items) ? po.items : (typeof po.items === 'string' ? JSON.parse(po.items) : []),
-        })),
-        suppliers: suppliersRes.rows.map((s: any) => ({
-          id: s.id,
-          code: s.code || '',
-          name: s.name,
-          pic: s.pic || '',
-          phone: s.phone || '',
-          email: s.email || '',
-          address: s.address || '',
-          status: s.status || 'Aktif',
-        })),
-        locations: locationsRes.rows.map((l: any) => ({
-          id: l.id,
-          code: l.code || '',
-          name: l.name,
-          building: l.building || '',
-          room: l.room || '',
-          type: l.type || 'Gudang',
-          temperatureCondition: l.temperature_condition || '',
-          status: l.status || 'Aktif',
-        })),
-        analyzers: analyzersRes.rows.map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          brand: a.brand || '',
-          model: a.model || '',
-          serialNumber: a.serial_number || '',
-          unit: a.unit || '',
-          parameters: Array.isArray(a.parameters) ? a.parameters : (typeof a.parameters === 'string' ? JSON.parse(a.parameters) : []),
-          status: a.status || 'Aktif',
-        })),
-        stockMovements: movementsRes.rows.map((m: any) => ({
-          id: m.id,
-          reagentId: m.reagent_id || '',
-          reagentName: m.reagent_name || '',
-          batchId: m.batch_id || '',
-          lotNumber: m.lot_number || '',
-          transactionId: m.transaction_id || '',
-          transactionNumber: m.transaction_number || '',
-          locationName: m.location_name || '',
-          movementType: m.movement_type || 'IN',
-          quantityIn: Number(m.quantity_in || 0),
-          quantityOut: Number(m.quantity_out || 0),
-          balanceAfter: Number(m.balance_after || 0),
-          createdAt: m.created_at || '',
-        })),
-        stockOpnames: opnamesRes.rows.map((so: any) => ({
-          id: so.id,
-          sessionNumber: so.session_number,
-          title: so.title,
-          locationId: so.location_id,
-          locationName: so.location_name,
-          date: so.date,
-          status: so.status,
-          notes: so.notes,
-          userId: so.user_id,
-          userName: so.user_name,
-          items: Array.isArray(so.items) ? so.items : (typeof so.items === 'string' ? JSON.parse(so.items) : []),
-        })),
-        auditLogs: logsRes.rows.map((al: any) => ({
-          id: al.id,
-          timestamp: al.timestamp,
-          userId: al.user_id,
-          userName: al.user_name,
-          userRole: al.user_role,
-          action: al.action,
-          module: al.module,
-          targetId: al.target_id,
-          details: al.details,
-        })),
-        notifications: notifsRes.rows.map((n: any) => ({
-          id: n.id,
-          title: n.title,
-          message: n.message,
-          type: n.type,
-          severity: n.severity || 'info',
-          timestamp: n.timestamp,
-          read: Boolean(n.read),
-          linkModule: n.link_module,
-        })),
+        reagents,
+        batches,
+        transactions,
+        purchaseOrders,
+        suppliers,
+        locations,
+        analyzers,
+        stockMovements,
+        stockOpnames,
+        auditLogs,
+        notifications,
         letterhead: {
           pemdaName: lh.pemda_name || '',
           hospitalName: lh.hospital_name || '',
@@ -754,16 +810,16 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const r of data.reagents) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(r.id, tenantId, r.code, r.name, r.brand, r.category, r.unit, r.minimumStock || 0, r.price || 0);
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(r.id, tenantId, r.code, r.name, r.brand, r.category, r.unit, r.minimumStock || 0, r.price || 0, JSON.stringify(r));
+            index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_reagents (id, tenant_id, code, name, brand, category, unit, min_stock, purchase_price, updated_at)
+            `INSERT INTO lrims_reagents (id, tenant_id, code, name, brand, category, unit, min_stock, purchase_price, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
                name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category,
-               unit = EXCLUDED.unit, min_stock = EXCLUDED.min_stock, purchase_price = EXCLUDED.purchase_price, updated_at = NOW()`,
+               unit = EXCLUDED.unit, min_stock = EXCLUDED.min_stock, purchase_price = EXCLUDED.purchase_price, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           
@@ -784,15 +840,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const b of data.batches) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(b.id, tenantId, b.reagentId, b.reagentName, b.lotNumber, b.barcode, b.currentQuantity || 0, b.expiryDate, b.status);
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(b.id, tenantId, b.reagentId, b.reagentName, b.lotNumber, b.barcode, b.currentQuantity || 0, b.expiryDate, b.status, JSON.stringify(b));
+            index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_batches (id, tenant_id, reagent_id, reagent_name, lot_number, barcode, current_quantity, expiry_date, status, updated_at)
+            `INSERT INTO lrims_batches (id, tenant_id, reagent_id, reagent_name, lot_number, barcode, current_quantity, expiry_date, status, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               current_quantity = EXCLUDED.current_quantity, expiry_date = EXCLUDED.expiry_date, status = EXCLUDED.status, updated_at = NOW()`,
+               current_quantity = EXCLUDED.current_quantity, expiry_date = EXCLUDED.expiry_date, status = EXCLUDED.status, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           
@@ -813,15 +869,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const t of data.transactions) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7})`);
-            values.push(t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName, JSON.stringify(t.items || []));
-            index += 8;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
+            values.push(t.id, tenantId, t.transactionNumber, t.type, t.date, t.totalAmount || 0, t.userName, JSON.stringify(t.items || []), JSON.stringify(t));
+            index += 9;
           }
           await client.query(
-            `INSERT INTO lrims_transactions (id, tenant_id, transaction_number, type, date, total_amount, user_name, items, updated_at)
+            `INSERT INTO lrims_transactions (id, tenant_id, transaction_number, type, date, total_amount, user_name, items, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               transaction_number = EXCLUDED.transaction_number, type = EXCLUDED.type, date = EXCLUDED.date, total_amount = EXCLUDED.total_amount, user_name = EXCLUDED.user_name, items = EXCLUDED.items, updated_at = NOW()`,
+               transaction_number = EXCLUDED.transaction_number, type = EXCLUDED.type, date = EXCLUDED.date, total_amount = EXCLUDED.total_amount, user_name = EXCLUDED.user_name, items = EXCLUDED.items, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           
@@ -842,15 +898,27 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const po of data.purchaseOrders) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
-            values.push(po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, po.subtotal || 0, po.tax || 0, po.total || 0, po.status, JSON.stringify(po.items || []));
-            index += 10;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11}, $${index + 12}, $${index + 13}, $${index + 14})`);
+            values.push(
+              po.id, tenantId, po.poNumber, po.orderDate, po.supplierName, 
+              po.subtotal || 0, po.tax || 0, po.total || 0, po.status, JSON.stringify(po.items || []),
+              po.supplierId || null, po.estimatedDeliveryDate || null, po.notes || null, po.createdAt || null,
+              JSON.stringify(po)
+            );
+            index += 15;
           }
           await client.query(
-            `INSERT INTO lrims_purchase_orders (id, tenant_id, po_number, order_date, supplier_name, subtotal, tax, total, status, items, updated_at)
+            `INSERT INTO lrims_purchase_orders (
+               id, tenant_id, po_number, order_date, supplier_name, 
+               subtotal, tax, total, status, items, 
+               supplier_id, estimated_delivery_date, notes, created_at,
+               payload, updated_at
+             )
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               status = EXCLUDED.status, subtotal = EXCLUDED.subtotal, tax = EXCLUDED.tax, total = EXCLUDED.total, items = EXCLUDED.items, updated_at = NOW()`,
+               status = EXCLUDED.status, subtotal = EXCLUDED.subtotal, tax = EXCLUDED.tax, total = EXCLUDED.total, items = EXCLUDED.items, 
+               supplier_id = EXCLUDED.supplier_id, estimated_delivery_date = EXCLUDED.estimated_delivery_date, notes = EXCLUDED.notes, created_at = EXCLUDED.created_at,
+               payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           
@@ -871,15 +939,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const s of data.suppliers) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(s.id, tenantId, s.code || '', s.name, s.pic || '', s.phone || '', s.email || '', s.address || '', s.status || 'Aktif');
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(s.id, tenantId, s.code || '', s.name, s.pic || '', s.phone || '', s.email || '', s.address || '', s.status || 'Aktif', JSON.stringify(s));
+            index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_suppliers (id, tenant_id, code, name, pic, phone, email, address, status, updated_at)
+            `INSERT INTO lrims_suppliers (id, tenant_id, code, name, pic, phone, email, address, status, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               code = EXCLUDED.code, name = EXCLUDED.name, pic = EXCLUDED.pic, phone = EXCLUDED.phone, email = EXCLUDED.email, address = EXCLUDED.address, status = EXCLUDED.status, updated_at = NOW()`,
+               code = EXCLUDED.code, name = EXCLUDED.name, pic = EXCLUDED.pic, phone = EXCLUDED.phone, email = EXCLUDED.email, address = EXCLUDED.address, status = EXCLUDED.status, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const supplierIds = data.suppliers.map(s => s.id);
@@ -899,15 +967,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const l of data.locations) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(l.id, tenantId, l.code || '', l.name, l.building || '', l.room || '', l.type || 'Gudang', l.temperatureCondition || '', l.status || 'Aktif');
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
+            values.push(l.id, tenantId, l.code || '', l.name, l.building || '', l.room || '', l.type || 'Gudang', l.temperatureCondition || '', l.status || 'Aktif', JSON.stringify(l));
+            index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_locations (id, tenant_id, code, name, building, room, type, temperature_condition, status, updated_at)
+            `INSERT INTO lrims_locations (id, tenant_id, code, name, building, room, type, temperature_condition, status, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               code = EXCLUDED.code, name = EXCLUDED.name, building = EXCLUDED.building, room = EXCLUDED.room, type = EXCLUDED.type, temperature_condition = EXCLUDED.temperature_condition, status = EXCLUDED.status, updated_at = NOW()`,
+               code = EXCLUDED.code, name = EXCLUDED.name, building = EXCLUDED.building, room = EXCLUDED.room, type = EXCLUDED.type, temperature_condition = EXCLUDED.temperature_condition, status = EXCLUDED.status, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const locationIds = data.locations.map(l => l.id);
@@ -927,15 +995,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const a of data.analyzers) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8})`);
-            values.push(a.id, tenantId, a.name, a.brand || '', a.model || '', a.serialNumber || '', a.unit || '', JSON.stringify(a.parameters || []), a.status || 'Aktif');
-            index += 9;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10})`);
+            values.push(a.id, tenantId, a.name, a.brand || '', a.model || '', a.serialNumber || '', a.unit || '', JSON.stringify(a.parameters || []), a.status || 'Aktif', JSON.stringify(a));
+            index += 11;
           }
           await client.query(
-            `INSERT INTO lrims_analyzers (id, tenant_id, name, brand, model, serial_number, unit, parameters, status, updated_at)
+            `INSERT INTO lrims_analyzers (id, tenant_id, name, brand, model, serial_number, unit, parameters, status, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               name = EXCLUDED.name, brand = EXCLUDED.brand, model = EXCLUDED.model, serial_number = EXCLUDED.serial_number, unit = EXCLUDED.unit, parameters = EXCLUDED.parameters, status = EXCLUDED.status, updated_at = NOW()`,
+               name = EXCLUDED.name, brand = EXCLUDED.brand, model = EXCLUDED.model, serial_number = EXCLUDED.serial_number, unit = EXCLUDED.unit, parameters = EXCLUDED.parameters, status = EXCLUDED.status, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const analyzerIds = data.analyzers.map(a => a.id);
@@ -955,21 +1023,21 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const m of data.stockMovements) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11}, $${index + 12}, $${index + 13}, $${index + 14})`);
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11}, $${index + 12}, $${index + 13}, $${index + 14}, $${index + 15})`);
             values.push(
               m.id, tenantId, m.reagentId || '', m.reagentName || '', m.batchId || '', m.lotNumber || '',
               m.transactionId || '', m.transactionNumber || '', m.locationName || '', m.movementType || 'IN',
-              m.quantityIn || 0, m.quantityOut || 0, m.balanceAfter || 0, m.createdAt || ''
+              m.quantityIn || 0, m.quantityOut || 0, m.balanceAfter || 0, m.createdAt || '', JSON.stringify(m)
             );
-            index += 14;
+            index += 15;
           }
           await client.query(
-            `INSERT INTO lrims_stock_movements (id, tenant_id, reagent_id, reagent_name, batch_id, lot_number, transaction_id, transaction_number, location_name, movement_type, quantity_in, quantity_out, balance_after, created_at, updated_at)
+            `INSERT INTO lrims_stock_movements (id, tenant_id, reagent_id, reagent_name, batch_id, lot_number, transaction_id, transaction_number, location_name, movement_type, quantity_in, quantity_out, balance_after, created_at, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
                reagent_id = EXCLUDED.reagent_id, reagent_name = EXCLUDED.reagent_name, batch_id = EXCLUDED.batch_id, lot_number = EXCLUDED.lot_number,
                transaction_id = EXCLUDED.transaction_id, transaction_number = EXCLUDED.transaction_number, location_name = EXCLUDED.location_name,
-               movement_type = EXCLUDED.movement_type, quantity_in = EXCLUDED.quantity_in, quantity_out = EXCLUDED.quantity_out, balance_after = EXCLUDED.balance_after, created_at = EXCLUDED.created_at, updated_at = NOW()`,
+               movement_type = EXCLUDED.movement_type, quantity_in = EXCLUDED.quantity_in, quantity_out = EXCLUDED.quantity_out, balance_after = EXCLUDED.balance_after, created_at = EXCLUDED.created_at, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const smIds = data.stockMovements.map(m => m.id);
@@ -989,15 +1057,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const so of data.stockOpnames) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11})`);
-            values.push(so.id, tenantId, so.sessionNumber || null, so.title || null, so.locationId || null, so.locationName || null, so.date || null, so.status || null, so.notes || null, so.userId || null, so.userName || null, JSON.stringify(so.items || []));
-            index += 12;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10}, $${index + 11}, $${index + 12})`);
+            values.push(so.id, tenantId, so.sessionNumber || null, so.title || null, so.locationId || null, so.locationName || null, so.date || null, so.status || null, so.notes || null, so.userId || null, so.userName || null, JSON.stringify(so.items || []), JSON.stringify(so));
+            index += 13;
           }
           await client.query(
-            `INSERT INTO lrims_stock_opnames (id, tenant_id, session_number, title, location_id, location_name, date, status, notes, user_id, user_name, items, updated_at)
+            `INSERT INTO lrims_stock_opnames (id, tenant_id, session_number, title, location_id, location_name, date, status, notes, user_id, user_name, items, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               session_number = EXCLUDED.session_number, title = EXCLUDED.title, location_id = EXCLUDED.location_id, location_name = EXCLUDED.location_name, date = EXCLUDED.date, status = EXCLUDED.status, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, items = EXCLUDED.items, updated_at = NOW()`,
+               session_number = EXCLUDED.session_number, title = EXCLUDED.title, location_id = EXCLUDED.location_id, location_name = EXCLUDED.location_name, date = EXCLUDED.date, status = EXCLUDED.status, notes = EXCLUDED.notes, user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, items = EXCLUDED.items, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const opnameIds = data.stockOpnames.map(so => so.id);
@@ -1017,12 +1085,12 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const al of data.auditLogs) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
-            values.push(al.id, tenantId, al.timestamp || null, al.userId || null, al.userName || null, al.userRole || null, al.action || null, al.module || null, al.targetId || null, al.details || null);
-            index += 10;
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10})`);
+            values.push(al.id, tenantId, al.timestamp || null, al.userId || null, al.userName || null, al.userRole || null, al.action || null, al.module || null, al.targetId || null, al.details || null, JSON.stringify(al));
+            index += 11;
           }
           await client.query(
-            `INSERT INTO lrims_audit_logs (id, tenant_id, timestamp, user_id, user_name, user_role, action, module, target_id, details, updated_at)
+            `INSERT INTO lrims_audit_logs (id, tenant_id, timestamp, user_id, user_name, user_role, action, module, target_id, details, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO NOTHING`,
             values
@@ -1044,15 +1112,15 @@ export class PostgresAdapter implements IDatabaseAdapter {
           const valueStrings: string[] = [];
           let index = 1;
           for (const n of data.notifications) {
-            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9})`);
-            values.push(n.id, tenantId, n.title || null, n.message || null, n.type || null, n.severity || 'info', n.timestamp || null, n.read || false, n.linkModule || null, null);
+            valueStrings.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4}, $${index + 5}, $${index + 6}, $${index + 7}, $${index + 8}, $${index + 9}, $${index + 10})`);
+            values.push(n.id, tenantId, n.title || null, n.message || null, n.type || null, n.severity || 'info', n.timestamp || null, n.read || false, n.linkModule || null, JSON.stringify(n));
             index += 10;
           }
           await client.query(
-            `INSERT INTO lrims_notifications (id, tenant_id, title, message, type, severity, timestamp, read, link_module, link_id, updated_at)
+            `INSERT INTO lrims_notifications (id, tenant_id, title, message, type, severity, timestamp, read, link_module, payload, updated_at)
              VALUES ${valueStrings.join(', ')}
              ON CONFLICT (id) DO UPDATE SET
-               title = EXCLUDED.title, message = EXCLUDED.message, type = EXCLUDED.type, severity = EXCLUDED.severity, timestamp = EXCLUDED.timestamp, read = EXCLUDED.read, link_module = EXCLUDED.link_module, link_id = EXCLUDED.link_id, updated_at = NOW()`,
+               title = EXCLUDED.title, message = EXCLUDED.message, type = EXCLUDED.type, severity = EXCLUDED.severity, timestamp = EXCLUDED.timestamp, read = EXCLUDED.read, link_module = EXCLUDED.link_module, payload = EXCLUDED.payload, updated_at = NOW()`,
             values
           );
           const notifIds = data.notifications.map(n => n.id);

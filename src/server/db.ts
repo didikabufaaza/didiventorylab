@@ -883,8 +883,8 @@ let memoryAccountsState: AccountsState | null = null;
 let lastCloudSyncTime = 0;
 
 export async function syncCloudAccountsState(force = false): Promise<AccountsState> {
-  // TTL cache: skip DB roundtrip if data was synced within the last 3 seconds (unless forced)
-  if (!force && memoryAccountsState && (Date.now() - lastCloudSyncTime) < 3000) {
+  // TTL cache: skip DB roundtrip if data was synced within the last 60 seconds (unless forced)
+  if (!force && memoryAccountsState && (Date.now() - lastCloudSyncTime) < 60000) {
     return memoryAccountsState;
   }
   if (activeAdapter) {
@@ -1563,6 +1563,8 @@ class DBManager {
   private cache = new Map<string, DBData>();
   private lastTenantLoadTime = new Map<string, number>();
   private currentTenantId: string;
+  private saveQueues = new Map<string, Promise<void>>();
+  private pendingSaves = new Map<string, DBData>();
 
   constructor() {
     ensureMultiTenantInitialized();
@@ -1607,7 +1609,7 @@ class DBManager {
     const lastLoad = this.lastTenantLoadTime.get(tenantId) || 0;
     const isCached = this.cache.has(tenantId);
 
-    if (!force && isCached && (now - lastLoad) < 3000) {
+    if (!force && isCached && (now - lastLoad) < 30000) {
       return this.cache.get(tenantId)!;
     }
 
@@ -1641,12 +1643,30 @@ class DBManager {
     this.ensureLoaded(this.currentTenantId);
     const data = this.cache.get(this.currentTenantId);
     if (data) {
+      // 1. Immediately save to local disk
       writeJsonFile(getTenantFile(this.currentTenantId), data);
+
+      // 2. Queue PostgreSQL adapter save in background if database URL exists
       if (activeAdapter) {
-        try {
-          await activeAdapter.saveTenantData(this.currentTenantId, data);
-        } catch (err) {
-          console.error(`[Adapter Save TenantData ${this.currentTenantId} Error]:`, err);
+        const tenantId = this.currentTenantId;
+        this.pendingSaves.set(tenantId, data);
+
+        if (!this.saveQueues.has(tenantId)) {
+          const runSaveLoop = async (tId: string) => {
+            while (this.pendingSaves.has(tId)) {
+              const dataToSave = this.pendingSaves.get(tId)!;
+              this.pendingSaves.delete(tId);
+              try {
+                await activeAdapter.saveTenantData(tId, dataToSave);
+              } catch (err) {
+                console.error(`[Background Save Error for tenant ${tId}]:`, err);
+              }
+            }
+            this.saveQueues.delete(tId);
+          };
+
+          const savePromise = runSaveLoop(tenantId);
+          this.saveQueues.set(tenantId, savePromise);
         }
       }
     }
